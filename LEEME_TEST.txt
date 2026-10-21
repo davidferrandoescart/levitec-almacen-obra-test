@@ -1,0 +1,17 @@
+WAREHOUSE TEST v1.4 — FRONTEND INDEPENDIENTE
+
+1. Crear repositorio NUEVO en GitHub: levitec-almacen-obra-test (Public).
+2. Subir el index.html de este ZIP a la RAÍZ del repositorio nuevo.
+3. Settings > Pages > Deploy from a branch > main > / (root) > Save.
+4. Abrir https://dferrando-hue.github.io/levitec-almacen-obra-test/
+5. La barra superior roja debe indicar ENTORNO DE PRUEBAS.
+
+CONFIGURACIÓN
+- Este index.html ya apunta al despliegue Apps Script TEST facilitado.
+- No sustituir el index.html del repositorio de producción.
+- En BACKEND WAREHOUSE - TEST, FRONTEND_ORIGIN debe ser exactamente https://dferrando-hue.github.io (sin barra final).
+- En BACKEND WAREHOUSE - TEST, GOOGLE_CLIENT_ID debe ser el cliente OAuth actual.
+- No conectar Site Control de producción al backend TEST.
+- Antes de hacer movimientos comprobar que se carga la app, los almacenes y las campas.
+
+NOTA: El mismo origen github.io para TEST y producción no es una barrera de seguridad. El aislamiento efectivo depende de la URL del backend y de DB_SPREADSHEET_ID.
