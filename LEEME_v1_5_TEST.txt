@@ -1,0 +1,30 @@
+LEVITEC WAREHOUSE v1.5 TEST — ENTREGA 1: LAYOUT
+================================================
+Archivos:
+- Code.gs: backend TEST, conserva comprobación explícita de DB_SPREADSHEET_ID contra el ID TEST.
+- index.html: frontend TEST actualizado.
+
+NOVEDADES
+- Zonas NO_ALMACENABLE para puertas, pasillos y áreas de acceso (visibles en gris).
+- Restricción backend: no se puede registrar una recepción ni un movimiento de stock hacia zonas no almacenables.
+- Editor con ajuste angular en tramos 0/45/90 grados (incluye diagonales en ambos sentidos).
+- Tramos manuales: primero marcar un vértice en el plano, después seleccionar dirección, indicar metros y pulsar «Añadir tramo».
+- Validación de todos los lados, incluido el cierre, antes de guardar. La geometría existente no se reescribe automáticamente.
+- En existencias y desplegables habituales: etiquetas legibles de zona, p. ej. N9 - COBRE CRAC, conservando el código original en Sheets.
+
+INSTALACIÓN EN TEST
+1. Crear copia de seguridad del Google Sheet TEST y de los dos archivos actuales.
+2. Sustituir TODO el contenido de Código.gs del Apps Script TEST por Code.gs.
+3. Guardar e implementar NUEVA VERSIÓN de la aplicación web TEST (misma URL de implementación).
+4. Sustituir index.html en repositorio GitHub Pages TEST y confirmar commit.
+5. Esperar publicación de GitHub Pages y recargar forzadamente (Ctrl+F5).
+6. NO ejecutar setup() ni migraciones para este cambio: no hay columnas nuevas.
+7. Verificar que la cabecera indica v1.5, que las existencias anteriores siguen visibles y que puede crearse una zona NO_ALMACENABLE en el layout TEST.
+8. Intentar mover material a una zona NO_ALMACENABLE: debe rechazarse. Probar dibujo y longitud manual con zona de ensayo.
+
+ALCANCE Y LIMITACIONES
+- Este paquete implementa solo el primer bloque (Layout). La simplificación de solicitudes, los movimientos multirreferencia y los traslados entre naves se abordarán en la siguiente entrega.
+- El contorno y las escalas del plano son PROVISIONALES, heredados de v1.4; las cotas manuales son relativas a esa escala, NO mediciones certificadas. Validar el plano físico antes de señalizar.
+- El tipo de zona existente no puede cambiarse en este paquete. Crear una zona nueva no almacenable para puertas/pasillos.
+- La comprobación de ángulos puede exigir redibujar zonas antiguas si se editan y se vuelven a guardar.
+- No se han ejecutado pruebas integradas contra Apps Script o Sheets reales desde aquí. Validar en TEST antes de producción.

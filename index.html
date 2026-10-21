@@ -134,6 +134,7 @@
     #warehousePlan text{pointer-events:none}
     .zone-shape{fill:var(--zone-color,#18a5a744);stroke:#067d83;stroke-width:2.5;cursor:pointer;transition:filter .15s}
     .zone-shape:hover,.zone-shape.selected{filter:saturate(1.7);stroke-width:4}
+    .zone-shape.nonstorage{fill:#8996a166;stroke:#596774;stroke-dasharray:6 4}.zone-item.nonstorage{background:#f1f3f5;border-color:#aebbc4}
     .zone-shape.quarantine{fill:#f5ad3766;stroke:#aa6410}.zone-shape.quarantine:hover,.zone-shape.quarantine.selected{fill:#f5ad37aa;stroke:#87470a}
     .zone-item.quarantine{border-color:#e7c183;background:#fffaf0}
     .floor-wrap{position:relative}.map-tooltip{position:absolute;z-index:3;max-width:230px;padding:8px 11px;border-radius:8px;background:#14273b;color:#fff;font-size:12px;line-height:1.4;pointer-events:none;box-shadow:0 4px 15px #14273b33}
@@ -165,7 +166,7 @@
   </style>
 </head>
 <body>
-  <div style="background:#8b261f;color:white;text-align:center;padding:10px;font-weight:800;letter-spacing:.06em;position:sticky;top:0;z-index:100">ENTORNO DE PRUEBAS · DATOS NO REALES · WAREHOUSE v1.4</div>
+  <div style="background:#8b261f;color:white;text-align:center;padding:10px;font-weight:800;letter-spacing:.06em;position:sticky;top:0;z-index:100">ENTORNO DE PRUEBAS · DATOS NO REALES · WAREHOUSE v1.5</div>
   <header class="topbar"><div class="topbar-inner">
     <div class="brand"><div class="brand-mark" aria-hidden="true">L</div><div><small>LEVITEC · SITE CONTROL</small><strong>Warehouse</strong></div></div>
     <div id="identity" class="identity" hidden>
@@ -229,7 +230,7 @@
             <g id="mapPolygons"></g><g id="mapDimensions"></g><g id="mapDraft"></g><g id="mapMeasure"></g>
             <path d="M65 47 H575" stroke="#859eaa" stroke-width="1"/><text x="320" y="39" text-anchor="middle" fill="#617986" font-size="14">20,87 m en el plano</text>
             <path d="M600 70 V590" stroke="#859eaa" stroke-width="1"/><text x="626" y="335" transform="rotate(90 626 335)" text-anchor="middle" fill="#617986" font-size="14">21,31 m en el plano</text>
-          </svg><div id="mapTooltip" class="map-tooltip" hidden></div></div><div class="map-legend"><span>Zonas de almacén</span><span class="blocked">Cuarentena</span></div><p class="intro">Plantilla geométrica provisional: comprueba que corresponde a esta nave. Las cotas y superficies son estimadas; mide físicamente antes de señalizar el suelo.</p></div>
+          </svg><div id="mapTooltip" class="map-tooltip" hidden></div></div><div class="map-legend"><span>Zonas de almacén</span><span class="blocked">Cuarentena</span><span>Accesos / zonas no almacenables</span></div><p class="intro">Plantilla geométrica provisional: comprueba que corresponde a esta nave. Las cotas y superficies son estimadas; mide físicamente antes de señalizar el suelo.</p></div>
           <div><h3>Ubicaciones registradas</h3><p class="intro">Elige una ubicación para consultar lo que figura en ella. Pulsa una zona dibujada o una ubicación de la lista para consultar su material.</p>
             <div id="mapZones" class="zone-list"></div><div id="mapDetail" class="map-detail" aria-live="polite">Selecciona una ubicación de almacén.</div>
             <div id="mapSetupHint" class="notice warning" hidden>Para delimitar zonas desde aquí, actualiza primero el código de Apps Script y su implementación web.</div>
@@ -243,8 +244,14 @@
             <label class="field"><span>Nombre *</span><input id="zoneName" oninput="markZoneDirty()" maxlength="80" placeholder="Tubería y accesorios"></label>
             <label class="field"><span>Categoría prevista *</span><input id="zoneCategory" oninput="markZoneDirty()" maxlength="80" placeholder="Conductos, tubería, pequeño material…"></label>
           </div>
-          <label id="zoneUseField" class="field" style="max-width:310px" hidden><span>Uso de la ubicación</span><select id="zoneUse" onchange="markZoneDirty()"><option value="ALMACEN">Almacenamiento normal</option><option value="CUARENTENA">Cuarentena · material bloqueado</option></select><small>El tipo queda fijado al crear la zona. La posición en el plano se elige al dibujarla.</small></label>
+          <label id="zoneUseField" class="field" style="max-width:410px"><span>Uso de la ubicación</span><select id="zoneUse" onchange="markZoneDirty()"><option value="ALMACEN">Almacenamiento normal</option><option value="CUARENTENA">Cuarentena · material bloqueado</option><option value="NO_ALMACENABLE">No almacenable · puerta, pasillo o acceso</option></select><small>El tipo queda fijado al crear la zona. La posición en el plano se elige al dibujarla.</small></label>
           <label class="field" style="max-width:280px"><span>Superficie útil medida en m²</span><input id="zoneArea" oninput="markZoneDirty()" type="number" inputmode="decimal" min="0.01" max="431.28" step="0.01" placeholder="Dejar en blanco si no está medida"><small>La superficie de la nave no equivale a la superficie útil de cada zona.</small></label>
+          <div class="form-grid three spacer">
+            <label class="field"><span>Dirección de tramo manual</span><select id="segmentAngle"><option value="0">Derecha → (0°)</option><option value="45">Abajo-derecha ↘ (45°)</option><option value="90">Abajo ↓ (90°)</option><option value="135">Abajo-izquierda ↙ (135°)</option><option value="180">Izquierda ← (180°)</option><option value="225">Arriba-izquierda ↖ (225°)</option><option value="270">Arriba ↑ (270°)</option><option value="315">Arriba-derecha ↗ (315°)</option></select></label>
+            <label class="field"><span>Longitud exacta del tramo (m)</span><input id="segmentLength" type="number" min="0.01" max="40" step="0.01" placeholder="Ej. 3,50"></label>
+            <label class="field"><span>Introducir lado</span><button class="button secondary" type="button" onclick="addMeasuredSegment()">Añadir tramo</button></label>
+          </div>
+          <p class="intro">Haz clic para marcar el primer vértice. Los siguientes se ajustan a horizontal, vertical o 45°. También puedes indicar dirección y longitud manualmente. El perímetro debe cerrar con uno de esos ángulos.</p>
           <div id="draftCount" class="summary">Selecciona una zona y pulsa «Dibujar zona» para marcar los vértices.</div>
           <div class="tools spacer"><button class="button secondary" type="button" onclick="beginMapDrawing()">Dibujar zona</button><button class="button ghost" type="button" onclick="undoMapPoint()">Deshacer punto</button><button id="zoneSave" class="button" type="button" onclick="saveMapZone()">Guardar zona</button></div>
         </div>
@@ -375,7 +382,7 @@
       document.body.append(frame,form);form.submit();
     })}
     function setChoices(id,items,key,label,placeholder){let el=$(id),previous=el.value;el.replaceChildren();if(placeholder){let option=new Option(placeholder,'');el.add(option)}
-      items.forEach(item=>el.add(new Option(item[label]||item[key],item[key])));if([...el.options].some(o=>o.value===previous))el.value=previous}
+      items.filter(item=>!(item.AREA==='NO_ALMACENABLE'&&id!=='zonePick')).forEach(item=>el.add(new Option(key==='CODIGO'&&id!=='zonePick'?zoneLabel(item[key]):(item[label]||item[key]),item[key])));if([...el.options].some(o=>o.value===previous))el.value=previous}
     const pages={map:['Layout','Consulta la distribución real de la nave y el inventario por ubicación.'],quality:['Cuarentena','Material inmovilizado a la espera de la decisión de Calidad.'],stock:['Existencias','Material disponible por proyecto y ubicación.'],notifications:['Notificaciones','Recepciones pendientes y solicitudes de uso de stock protegido.'],transfers:['Traspasos','Consumos cruzados y saldos pendientes de compensar entre proyectos.'],logistics:['Logística','Solicitudes, salidas y confirmaciones entre naves y campas.'],moves:['Movimientos','Consulta la trazabilidad y confirma las entregas pendientes.'],receipt:['Nueva recepción','Registra la entrada de material con su albarán.'],transfer:['Mover material','Traslada existencias entre ubicaciones.']};
     function view(id,load=true){if(!pages[id]||(!['ADMIN','ALMACEN'].includes(state.user?.role)&&['receipt','transfer'].includes(id)))return;
       activeView=id;Object.keys(pages).forEach(k=>{$(k).hidden=k!==id});document.querySelectorAll('.tab').forEach(b=>{let selected=b.dataset.view===id;b.classList.toggle('active',selected);b.setAttribute('aria-current',selected?'page':'false')});
@@ -404,8 +411,9 @@
       try{await call('resolveQuarantine',{batchId:pendingRelease,action,project:x.project,origin:x.zone,destination,materialId:x.materialId,quantity,reason});pendingRelease='';await afterSave('Resolución de cuarentena registrada con trazabilidad.','quality')}catch(e){fail(e)}finally{actionBusy=false}}
     function filteredStock(){let q=normalize($('search').value),p=$('stockProject').value,z=$('stockZone').value;
       return availableStock().filter(x=>(!p||x.project===p)&&(!z||x.zone===z)&&normalize([x.description,x.reference,x.project,x.zone].join(' ')).includes(q))}
+    function zoneLabel(code){let z=(state.zones||[]).find(x=>x.CODIGO===code);if(!z)return code;let wh=state.currentWarehouse?.id||'';let m=wh.match(/-N(\d+)$/);return (m?'N'+m[1]+' - ':'')+(z.NOMBRE||code)}
     function renderStock(){let rows=filteredStock();lastVisibleStock=rows;$('stockCount').textContent=rows.length+' posiciones visibles';$('stockEmpty').hidden=rows.length>0;
-      $('stockRows').innerHTML=rows.map(x=>'<tr><td data-label="Material"><strong>'+esc(x.description)+'</strong></td><td data-label="Referencia">'+esc(x.reference||'—')+'</td><td data-label="Proyecto">'+esc(x.project)+'</td><td data-label="Ubicación">'+esc(x.zone)+'</td><td data-label="Disponible" class="right"><span class="qty">'+esc(x.quantity)+' '+esc(x.unit)+'</span></td></tr>').join('')}
+      $('stockRows').innerHTML=rows.map(x=>'<tr><td data-label="Material"><strong>'+esc(x.description)+'</strong></td><td data-label="Referencia">'+esc(x.reference||'—')+'</td><td data-label="Proyecto">'+esc(x.project)+'</td><td data-label="Ubicación">'+esc(zoneLabel(x.zone))+'</td><td data-label="Disponible" class="right"><span class="qty">'+esc(x.quantity)+' '+esc(x.unit)+'</span></td></tr>').join('')}
     const SVG_NS='http://www.w3.org/2000/svg';
     const METRES_X=20.87/510,METRES_Y=21.31/520;
     function segmentMetres(a,b){return Math.hypot((b[0]-a[0])*METRES_X,(b[1]-a[1])*METRES_Y)}
@@ -423,19 +431,19 @@
       let p=point.matrixTransform(svg.getScreenCTM().inverse());return[Math.round(p.x*10)/10,Math.round(p.y*10)/10]}
     function clearMapMeasure(){$('mapMeasure').replaceChildren()}
     function mapCanvasMove(event){clearMapMeasure();if(!drawing||!draftPoints.length)return;
-      let end=svgPoint(event);if(!pointInFloor(...end))return;
+      let end=snapMapPoint(draftPoints[draftPoints.length-1],svgPoint(event));if(!pointInFloor(...end))return;
       let group=$('mapMeasure'),start=draftPoints[draftPoints.length-1],line=document.createElementNS(SVG_NS,'line');
       for(const[name,value]of Object.entries({x1:start[0],y1:start[1],x2:end[0],y2:end[1]}))line.setAttribute(name,value);
       line.setAttribute('class','dimension-preview');group.append(line);segmentLabel(group,start,end)}
     function mapConfig(code){return(state.zoneMap||[]).find(z=>z.code===code&&z.warehouseId===state.currentWarehouse?.id)}
     function hideMapTooltip(){$('mapTooltip').hidden=true}
     function showMapTooltip(event,code){if(drawing)return;let zone=state.zones?.find(z=>z.CODIGO===code),count=(state.stock||[]).filter(x=>x.zone===code&&Number(x.quantity)>0).length;
-      let tip=$('mapTooltip'),bounds=tip.parentElement.getBoundingClientRect();tip.textContent=(zone?.NOMBRE||code)+' · '+code+(zone?.AREA==='CUARENTENA'?' · BLOQUEADO':'')+' · '+count+' referencias';tip.hidden=false;
+      let tip=$('mapTooltip'),bounds=tip.parentElement.getBoundingClientRect();tip.textContent=(zone?.NOMBRE||code)+' · '+code+(zone?.AREA==='CUARENTENA'?' · BLOQUEADO':zone?.AREA==='NO_ALMACENABLE'?' · NO ALMACENABLE':'')+' · '+count+' referencias';tip.hidden=false;
       tip.style.left=Math.min(Math.max(8,event.clientX-bounds.left+12),Math.max(8,bounds.width-tip.offsetWidth-8))+'px';tip.style.top=Math.max(8,event.clientY-bounds.top-tip.offsetHeight-10)+'px'}
     function drawZoneShapes(){let parent=$('mapPolygons');parent.replaceChildren();
       for(const z of (state.zoneMap||[]).filter(x=>x.warehouseId===state.currentWarehouse?.id)){if(!Array.isArray(z.points)||z.points.length<3||drawing&&editorZoneCode===z.code)continue;
         let poly=document.createElementNS(SVG_NS,'polygon');poly.setAttribute('points',z.points.map(p=>p.join(',')).join(' '));
-        poly.setAttribute('class','zone-shape'+(state.zones?.some(zone=>zone.CODIGO===z.code&&zone.AREA==='CUARENTENA')?' quarantine':'')+($('mapDetail').dataset.zone===z.code?' selected':''));
+        poly.setAttribute('class','zone-shape'+(state.zones?.some(zone=>zone.CODIGO===z.code&&zone.AREA==='CUARENTENA')?' quarantine':state.zones?.some(zone=>zone.CODIGO===z.code&&zone.AREA==='NO_ALMACENABLE')?' nonstorage':'')+($('mapDetail').dataset.zone===z.code?' selected':''));
         let idx=(state.zones||[]).filter(zone=>zone.AREA==='ALMACEN').findIndex(zone=>zone.CODIGO===z.code),colors=['#149aa0','#557bc3','#62a96d','#b578bb','#bc8d54','#4e9eae'];
         if(idx>=0){let color=colors[idx%colors.length];poly.style.setProperty('--zone-color',color+'77');poly.style.stroke=color}
         poly.setAttribute('aria-label','Zona '+z.code+' · '+z.category);poly.setAttribute('role','button');poly.setAttribute('tabindex','0');
@@ -445,16 +453,16 @@
         let title=document.createElementNS(SVG_NS,'title');title.textContent=z.code+' · '+z.category;poly.append(title);parent.append(poly);
       }zoneDimensions();
     }
-    function renderMap(){let zones=(state.zones||[]).filter(z=>['ALMACEN','CUARENTENA'].includes(z.AREA));
+    function renderMap(){let zones=(state.zones||[]).filter(z=>['ALMACEN','CUARENTENA','NO_ALMACENABLE'].includes(z.AREA));
       $('mapZones').innerHTML=zones.map(z=>{let n=(state.stock||[]).filter(x=>x.zone===z.CODIGO&&Number(x.quantity)>0).length,conf=mapConfig(z.CODIGO);
-        return '<button class="zone-item'+(z.AREA==='CUARENTENA'?' quarantine':'')+'" type="button" data-zone="'+esc(z.CODIGO)+'" onclick="selectMapZone(this.dataset.zone)"><strong>'+esc(z.NOMBRE||z.CODIGO)+' · '+esc(z.CODIGO)+(z.AREA==='CUARENTENA'?' · BLOQUEADO':'')+'</strong><span>'+n+' posición(es) con material · '+(conf?'En plano · '+esc(conf.category)+(conf.area?' · '+esc(conf.area)+' m² declarados':' · ≈ '+esc(polygonAreaMetres(conf.points))+' m² en plano'):'sin delimitar en el plano')+'</span></button>'}).join('')||'<p class="muted">Todavía no hay ubicaciones configuradas.</p>';
+        return '<button class="zone-item'+(z.AREA==='CUARENTENA'?' quarantine':z.AREA==='NO_ALMACENABLE'?' nonstorage':'')+'" type="button" data-zone="'+esc(z.CODIGO)+'" onclick="selectMapZone(this.dataset.zone)"><strong>'+esc(z.NOMBRE||z.CODIGO)+' · '+esc(z.CODIGO)+(z.AREA==='CUARENTENA'?' · BLOQUEADO':z.AREA==='NO_ALMACENABLE'?' · NO ALMACENABLE':'')+'</strong><span>'+n+' posición(es) con material · '+(conf?'En plano · '+esc(conf.category)+(conf.area?' · '+esc(conf.area)+' m² declarados':' · ≈ '+esc(polygonAreaMetres(conf.points))+' m² en plano'):'sin delimitar en el plano')+'</span></button>'}).join('')||'<p class="muted">Todavía no hay ubicaciones configuradas.</p>';
       $('zoneEditorToggle').hidden=state.user?.role!=='ADMIN'||!state.zoneMapSupported;
       $('mapSetupHint').hidden=state.user?.role!=='ADMIN'||state.zoneMapSupported;
       if(!state.zoneMapSupported)$('zoneEditor').hidden=true;
       if(state.zoneMapSupported)setChoices('zonePick',zones,'CODIGO','NOMBRE','Nueva zona');
       drawZoneShapes();let previous=$('mapDetail').dataset.zone;
       if(previous&&zones.some(z=>z.CODIGO===previous))selectMapZone(previous);else $('mapDetail').textContent='Selecciona una ubicación de almacén.'}
-    function selectMapZone(code){let zone=(state.zones||[]).find(z=>z.CODIGO===code&&['ALMACEN','CUARENTENA'].includes(z.AREA));if(!zone)return;
+    function selectMapZone(code){let zone=(state.zones||[]).find(z=>z.CODIGO===code&&['ALMACEN','CUARENTENA','NO_ALMACENABLE'].includes(z.AREA));if(!zone)return;
       $('mapDetail').dataset.zone=code;document.querySelectorAll('.zone-item').forEach(b=>b.classList.toggle('selected',b.dataset.zone===code));
       drawZoneShapes();let raw=(state.stock||[]).filter(x=>x.zone===code&&Number(x.quantity)>0),conf=mapConfig(code);
       let lengths=conf?.points?.map((p,i)=>metresText(p,conf.points[(i+1)%conf.points.length])).join(' · ');
@@ -463,7 +471,7 @@
       let items=[...groups.values()];
       let materialHtml=items.length?'<div class="zone-materials">'+items.map(x=>{let split=Object.entries(x.projects).map(([p,q])=>p+' '+(Math.round(q*1000)/1000)+' '+x.unit).join(' · ');
         return '<button type="button" class="zone-material" '+(canMove?'onclick="prepareMoveFromLayout(\''+esc(code)+'\',\''+esc(x.materialId)+'\')"':'disabled')+'><span class="zone-material-ref">'+esc(x.reference||'Sin referencia')+'</span><strong>'+esc(x.description)+'</strong><span class="zone-material-meta">'+esc(Math.round(x.quantity*1000)/1000)+' '+esc(x.unit)+' disponibles'+(split?' · '+esc(split):'')+'</span>'+(canMove?'<span class="zone-material-action">Mover material →</span>':'')+'</button>'}).join('')+'</div>':'<p class="muted">Sin existencias en esta ubicación.</p>';
-      $('mapDetail').innerHTML='<h3>'+esc(zone.NOMBRE||code)+'</h3><small>'+esc(code)+(zone.AREA==='CUARENTENA'?' · MATERIAL BLOQUEADO':'')+' · '+(conf?'en plano · categoría: '+esc(conf.category)+(conf.area?' · '+esc(conf.area)+' m² declarados':' · superficie útil pendiente')+' · ≈ '+esc(polygonAreaMetres(conf.points))+' m² geométricos estimados':'posición exacta pendiente')+'</small>'+(lengths?'<small>Lados aproximados: '+esc(lengths)+'</small>':'')+materialHtml}
+      $('mapDetail').innerHTML='<h3>'+esc(zone.NOMBRE||code)+'</h3><small>'+esc(code)+(zone.AREA==='CUARENTENA'?' · MATERIAL BLOQUEADO':zone.AREA==='NO_ALMACENABLE'?' · NO ALMACENABLE':'')+' · '+(conf?'en plano · categoría: '+esc(conf.category)+(conf.area?' · '+esc(conf.area)+' m² declarados':' · superficie útil pendiente')+' · ≈ '+esc(polygonAreaMetres(conf.points))+' m² geométricos estimados':'posición exacta pendiente')+'</small>'+(lengths?'<small>Lados aproximados: '+esc(lengths)+'</small>':'')+materialHtml}
     function prepareMoveFromLayout(origin,materialId){if(!['ADMIN','ALMACEN'].includes(state.user?.role))return;
       view('transfer',false);$('mOrigin').value=origin;available();
       if([...$('mMaterial').options].some(o=>o.value===materialId))$('mMaterial').value=materialId;renderMoveSummary();$('mQuantity').focus();
@@ -479,7 +487,7 @@
       if(!editor.hidden)loadZoneEditor();else{drawing=false;draftDirty=false;geometryDirty=false;$('warehousePlan').classList.remove('editor');clearMapMeasure();$('mapDraft').replaceChildren();drawZoneShapes()}}
     function loadZoneEditor(){let code=$('zonePick').value,z=(state.zones||[]).find(x=>x.CODIGO===code),conf=mapConfig(code);
       editorZoneCode=code;$('zoneCode').value=code||nextZoneCode();$('zoneCode').readOnly=!!code;$('zoneName').value=z?.NOMBRE||'';
-      $('zoneCategory').value=conf?.category||'';$('zoneArea').value=conf?.area||'';$('zoneUse').value=z?.AREA==='CUARENTENA'?'CUARENTENA':'ALMACEN';$('zoneUse').disabled=!!code;
+      $('zoneCategory').value=conf?.category||'';$('zoneArea').value=conf?.area||'';$('zoneUse').value=z?.AREA||'ALMACEN';$('zoneUse').disabled=!!code;
       draftPoints=conf?.points?.map(p=>[...p])||[];drawing=false;draftDirty=false;geometryDirty=false;$('warehousePlan').classList.remove('editor');clearMapMeasure();
       if(code)selectMapZone(code);else{delete $('mapDetail').dataset.zone;$('mapDetail').textContent='Nueva zona '+$('zoneCode').value+': dibuja su perímetro y pulsa «Guardar zona». Las zonas verdes ya guardadas siguen en el plano.';
         document.querySelectorAll('.zone-item').forEach(b=>b.classList.remove('selected'));drawZoneShapes()}
@@ -502,7 +510,24 @@
     function pointInFloor(x,y){let polygon=[[65,70],[575,70],[575,590],[235,590],[65,420]],direction=0;
       for(let i=0;i<polygon.length;i++){let a=polygon[i],b=polygon[(i+1)%polygon.length],cross=(b[0]-a[0])*(y-a[1])-(b[1]-a[1])*(x-a[0]);
         if(Math.abs(cross)<.01)continue;if(direction&&Math.sign(cross)!==direction)return false;direction=Math.sign(cross)}return true}
-    function mapCanvasClick(e){if(!drawing)return;let [x,y]=svgPoint(e);
+    function snapMapPoint(start,end){
+      if(!start)return end;
+      let dx=(end[0]-start[0])*METRES_X,dy=(end[1]-start[1])*METRES_Y;
+      if(Math.hypot(dx,dy)<0.006)return end;
+      let angle=Math.round(Math.atan2(dy,dx)/(Math.PI/4))*Math.PI/4;
+      let length=dx*Math.cos(angle)+dy*Math.sin(angle);
+      return [Math.round((start[0]+length*Math.cos(angle)/METRES_X)*10)/10,Math.round((start[1]+length*Math.sin(angle)/METRES_Y)*10)/10]
+    }
+    function addMeasuredSegment(){
+      if(!drawing||!draftPoints.length){status('Dibuja primero el punto inicial de la zona.','error');return}
+      let len=Number(String($('segmentLength').value).replace(',','.'));
+      if(!Number.isFinite(len)||len<=0||len>40){status('Introduce una longitud válida en metros.','error');return}
+      let a=Number($('segmentAngle').value)*Math.PI/180,start=draftPoints[draftPoints.length-1];
+      let p=[Math.round((start[0]+len*Math.cos(a)/METRES_X)*10)/10,Math.round((start[1]+len*Math.sin(a)/METRES_Y)*10)/10];
+      if(!pointInFloor(...p)||draftPoints.length>=20){status('El tramo sale del plano o excede los 20 vértices.','error');return}
+      draftPoints.push(p);draftDirty=true;geometryDirty=true;renderDraft();clearMapMeasure();
+    }
+    function mapCanvasClick(e){if(!drawing)return;let raw=svgPoint(e),[x,y]=draftPoints.length?snapMapPoint(draftPoints[draftPoints.length-1],raw):raw;
       if(!pointInFloor(x,y)){status('Marca los puntos dentro del contorno de la nave.','error');return}
       if(draftPoints.length>=20){status('Máximo 20 vértices por zona.','error');return}
       draftPoints.push([x,y]);draftDirty=true;geometryDirty=true;clearMapMeasure();renderDraft()}
@@ -510,6 +535,10 @@
       const targetWarehouse=state.currentWarehouse?.id;
       let code=$('zoneCode').value.trim().toUpperCase(),name=$('zoneName').value.trim(),category=$('zoneCategory').value.trim(),area=$('zoneArea').value.trim(),use=$('zoneUse').value;
       if(!/^[A-Z0-9-]{2,20}$/.test(code)||!name||!category||draftPoints.length<3){status('Completa código, nombre, categoría y al menos tres puntos.','error');return}
+      for(let i=0;i<draftPoints.length;i++){
+        let a=draftPoints[i],b=draftPoints[(i+1)%draftPoints.length],dx=Math.abs(a[0]-b[0])*METRES_X,dy=Math.abs(a[1]-b[1])*METRES_Y;
+        if(Math.hypot(dx,dy)<.005||!(Math.min(dx,dy)<.007||Math.abs(dx-dy)<.012)){status('El tramo '+(i+1)+' no cumple 0°, 45° o 90°. Revisa especialmente el cierre del polígono.','error');return}
+      }
       if(!confirm('Guardar la delimitación de '+code+' para todos los usuarios?'))return;
       zoneSaving=true;$('zoneSave').disabled=true;status('Guardando la zona…','info');
       try{let r=await call('saveZoneMap',{warehouseId:targetWarehouse,code,name,category,area,use,points:draftPoints});drawing=false;draftDirty=false;geometryDirty=false;$('warehousePlan').classList.remove('editor');clearMapMeasure();
@@ -901,7 +930,7 @@
         let actions='';
         if(r.ESTADO==='SOLICITADO'&&canDispatch)actions='<button class="button small" data-id="'+esc(r.ID)+'" onclick="logisticsAction(this.dataset.id,&quot;dispatch&quot;)">Confirmar salida</button> <button class="button secondary small" data-id="'+esc(r.ID)+'" onclick="logisticsAction(this.dataset.id,&quot;cancel&quot;)">Cancelar</button>';
         if(r.ESTADO==='EN_TRANSITO'&&canReceive)actions='<button class="button small" data-id="'+esc(r.ID)+'" onclick="logisticsAction(this.dataset.id,&quot;receive&quot;)">Confirmar recepción</button>';
-        return '<div class="line"><div class="line-title"><h3>'+esc(r.REFERENCIA||r.DESCRIPCION)+' · '+esc(r.PROYECTO)+'</h3><span class="pill '+(r.ESTADO==='RECIBIDO'?'received':'pending')+'">'+esc(r.ESTADO)+'</span></div><p>'+esc(r.CANTIDAD)+' '+esc(r.UNIDAD)+' · '+esc(r.ORIGEN_ALMACEN)+' ('+esc(r.ORIGEN_ZONA)+') → '+esc(r.DESTINO_ALMACEN)+' ('+esc(r.DESTINO_ZONA)+')</p><p class="muted">'+esc(r.MODO)+' · '+esc(r.SOLICITADO_POR)+' · '+esc(r.ID)+'</p>'+(r.INCIDENCIA?'<p class="notice warning">'+esc(r.INCIDENCIA)+'</p>':'')+'<div class="actions">'+actions+'</div></div>';
+        return '<div class="line"><div class="line-title"><h3>'+esc(r.REFERENCIA||r.DESCRIPCION)+' · '+esc(r.PROYECTO)+'</h3><span class="pill '+(r.ESTADO==='RECIBIDO'?'received':'pending')+'">'+esc(r.ESTADO)+'</span></div><p>'+esc(r.CANTIDAD)+' '+esc(r.UNIDAD)+' · '+esc(r.ORIGEN_ALMACEN)+' ('+esc(zoneLabel(r.ORIGEN_ZONA))+') → '+esc(r.DESTINO_ALMACEN)+' ('+esc(zoneLabel(r.DESTINO_ZONA))+')</p><p class="muted">'+esc(r.MODO)+' · '+esc(r.SOLICITADO_POR)+' · '+esc(r.ID)+'</p>'+(r.INCIDENCIA?'<p class="notice warning">'+esc(r.INCIDENCIA)+'</p>':'')+'<div class="actions">'+actions+'</div></div>';
       }).join(''):'<p class="muted">Todavía no hay movimientos logísticos.</p>';
     }
     async function logisticsAction(id,kind){if(actionBusy)return;const r=(state.logistics||[]).find(x=>x.ID===id);if(!r)return;
