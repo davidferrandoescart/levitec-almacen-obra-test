@@ -250,7 +250,7 @@
           </div>
           <label id="zoneUseField" class="field" style="max-width:410px"><span>Uso de la ubicación</span><select id="zoneUse" onchange="markZoneDirty()"><option value="ALMACEN">Almacenamiento normal</option><option value="CUARENTENA">Cuarentena · material bloqueado</option><option value="NO_ALMACENABLE">No almacenable · puerta, pasillo o acceso</option></select><small>El tipo queda fijado al crear la zona. La posición en el plano se elige al dibujarla.</small></label>
           <label class="field" style="max-width:280px"><span>Superficie útil medida en m²</span><input id="zoneArea" oninput="markZoneDirty()" type="number" inputmode="decimal" min="0.01" max="431.28" step="0.01" placeholder="Dejar en blanco si no está medida"><small>La superficie de la nave no equivale a la superficie útil de cada zona.</small></label>
-          <p class="intro"><strong>Dibujo acotado:</strong> marca el punto inicial; mueve el cursor para orientar el siguiente tramo (0°, 45° o 90°) y escribe su longitud en el cuadro junto al cursor. Pulsa <strong>Enter</strong> para fijarlo. También puedes hacer clic para aceptar una longitud aproximada. Para terminar, haz clic sobre el primer vértice: se cerrará solo si el último lado cumple el ángulo permitido. No se añaden esquinas ni se modifican las cotas.</p>
+          <p class="intro"><strong>Dibujo acotado:</strong> marca el punto inicial; mueve el cursor para orientar el siguiente tramo (0°, 45° o 90°) y escribe su longitud en el cuadro junto al cursor. Pulsa <strong>Enter</strong> para fijarlo. También puedes hacer clic para aceptar una longitud aproximada. Para terminar, haz clic cerca del primer vértice: el tramo de cierre puede tener un ángulo real distinto de 45°. Los tramos anteriores siguen asistidos a 0°, 45° y 90°. Si dibujas junto al contorno, los puntos se ajustan a sus paredes y esquinas sin alterar cotas ya introducidas.</p>
           <div id="draftCount" class="summary">Selecciona una zona y pulsa «Dibujar zona» para marcar los vértices.</div>
           <div class="tools spacer"><button class="button secondary" type="button" onclick="beginMapDrawing()">Dibujar zona</button><button class="button ghost" type="button" onclick="undoMapPoint()">Deshacer punto</button><button id="zoneSave" class="button" type="button" onclick="saveMapZone()">Guardar zona</button></div>
         </div>
@@ -547,12 +547,27 @@
       let length=dx*Math.cos(angle)+dy*Math.sin(angle);
       return [Math.round((start[0]+length*Math.cos(angle)/METRES_X)*10)/10,Math.round((start[1]+length*Math.sin(angle)/METRES_Y)*10)/10]
     }
+    const FLOOR_VERTICES=[[65,70],[575,70],[575,590],[235,590],[65,420]];
+    function snapToFloorBoundary(point, tolerance=9){
+      let best=point, min=tolerance;
+      for(let i=0;i<FLOOR_VERTICES.length;i++){
+        const a=FLOOR_VERTICES[i],b=FLOOR_VERTICES[(i+1)%FLOOR_VERTICES.length];
+        const dx=b[0]-a[0],dy=b[1]-a[1],t=Math.max(0,Math.min(1,((point[0]-a[0])*dx+(point[1]-a[1])*dy)/(dx*dx+dy*dy)));
+        const candidate=[a[0]+t*dx,a[1]+t*dy],distance=Math.hypot(point[0]-candidate[0],point[1]-candidate[1]);
+        if(distance<min){min=distance;best=candidate}
+      }
+      return best.map(v=>Math.round(v*10)/10)
+    }
     function mapCanvasClick(e){if(!drawing)return;
       const raw=svgPoint(e);
       if(draftPoints.length>=3&&Math.hypot(raw[0]-draftPoints[0][0],raw[1]-draftPoints[0][1])<=11){
-        if(!canCloseMapPolygon()){status('El último lado no permite cerrar a 0°, 45° o 90°. Ajusta la longitud del tramo anterior; no se cambiarán las cotas automáticamente.','error');return}
+        if(!canCloseMapPolygon()){status('No se puede cerrar: el perímetro se cruza o el último tramo es demasiado corto. Revisa los vértices.','error');return}
         drawing=false;cadHide();clearMapMeasure();renderDraft();status('Perímetro cerrado. Revisa las cotas y guarda la zona.','success');return}
-      const [x,y]=draftPoints.length?snapMapPoint(draftPoints[draftPoints.length-1],raw):raw;
+      const boundary=snapToFloorBoundary(raw);
+      // El primer punto se ajusta al perímetro. En tramos posteriores se conserva
+      // el ángulo asistido, excepto al pulsar deliberadamente sobre una pared.
+      const target=Math.hypot(boundary[0]-raw[0],boundary[1]-raw[1])<4?boundary:raw;
+      const [x,y]=draftPoints.length?snapMapPoint(draftPoints[draftPoints.length-1],target):target;
       if(!pointInFloor(x,y)){status('Marca los puntos dentro del contorno de la nave.','error');return}
       if(draftPoints.length>=20){status('Máximo 20 vértices por zona.','error');return}
       if(draftPoints.length&&segmentMetres(draftPoints[draftPoints.length-1],[x,y])<.01)return;
@@ -568,7 +583,7 @@
     }
     function canCloseMapPolygon(){if(draftPoints.length<3)return false;
       const first=draftPoints[0],last=draftPoints[draftPoints.length-1];
-      if(!allowedMapSegment(last,first))return false;
+      if(segmentMetres(last,first)<.005)return false;
       for(let i=1;i<draftPoints.length-2;i++)if(mapSegmentsIntersect(last,first,draftPoints[i],draftPoints[i+1]))return false;
       return true}
     async function saveMapZone(){if(zoneSaving||warehouseSwitching||state.user?.role!=='ADMIN'||!state.zoneMapSupported)return;
@@ -577,8 +592,9 @@
       if(!/^[A-Z0-9-]{2,20}$/.test(code)||!name||!category||draftPoints.length<3){status('Completa código, nombre, categoría y al menos tres puntos.','error');return}
       for(let i=0;i<draftPoints.length;i++){
         let a=draftPoints[i],b=draftPoints[(i+1)%draftPoints.length],dx=Math.abs(a[0]-b[0])*METRES_X,dy=Math.abs(a[1]-b[1])*METRES_Y;
-        if(!allowedMapSegment(a,b)){status('El tramo '+(i+1)+' no cumple 0°, 45° o 90°. Ajusta el último lado con su longitud exacta y cierra pulsando el primer vértice.','error');return}
+        if(i<draftPoints.length-1&&!allowedMapSegment(a,b)){status('El tramo '+(i+1)+' no cumple 0°, 45° o 90°. Solo el tramo de cierre admite un ángulo libre.','error');return}
       }
+      if(!canCloseMapPolygon()){status('El perímetro no puede cerrarse: hay un cruce de segmentos o un lado final nulo.','error');return}
       if(!confirm('Guardar la delimitación de '+code+' para todos los usuarios?'))return;
       zoneSaving=true;$('zoneSave').disabled=true;status('Guardando la zona…','info');
       try{let r=await call('saveZoneMap',{warehouseId:targetWarehouse,code,name,category,area,use,points:draftPoints});drawing=false;draftDirty=false;geometryDirty=false;$('warehousePlan').classList.remove('editor');clearMapMeasure();

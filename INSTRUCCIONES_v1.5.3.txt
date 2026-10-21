@@ -1,0 +1,26 @@
+LEVITEC WAREHOUSE TEST v1.5.3 — CIERRE GEOMÉTRICO REAL
+
+ARCHIVOS: index.html (GitHub Pages TEST) y Code.gs (Apps Script TEST).
+
+IMPORTANTE: Esta versión requiere actualizar AMBOS archivos. El backend v1.5.2 rechazará el cierre irregular aunque el frontend lo permita.
+
+1. Copia de seguridad de ambos archivos de TEST.
+2. Sustituir Code.gs únicamente en BACKEND WAREHOUSE - TEST. Guardar.
+3. Apps Script TEST > Implementar > Gestionar implementaciones > Editar > Nueva versión > Implementar.
+4. Sustituir index.html en levitec-almacen-obra-test. Esperar GitHub Pages y recargar Ctrl+F5.
+5. NO ejecutar setup(), migraciones ni modificar producción.
+
+CAMBIOS:
+- Los lados intermedios siguen restringidos a 0°, 45°, 90° (múltiplos de 45°).
+- El lado de cierre puede adoptar el ángulo geométrico real; no modifica cotas previas.
+- El primer vértice puede ajustarse al contorno de la nave cuando se marca cerca de una pared.
+- El backend admite cierre de ángulo libre y rechaza polígonos con aristas que se cruzan.
+
+PRUEBA:
+- En TEST, crear una zona triangular con catetos 6,68 m y 6,57 m; cerrar pulsando el primer punto y guardar.
+- Confirmar que las medidas no cambian y que la zona aparece en el layout.
+- Probar un rectángulo y comprobar que no se ha modificado el resto de zonas ni las existencias.
+
+LIMITACIONES:
+- No se ha incorporado todavía una herramienta de 'Seguir perímetro' que inserte automáticamente esquinas del contorno.
+- Las dimensiones siguen basadas en escala provisional del plano.
