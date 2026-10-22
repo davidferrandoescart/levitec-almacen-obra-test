@@ -170,7 +170,7 @@
   </style>
 </head>
 <body>
-  <div style="background:#8b261f;color:white;text-align:center;padding:10px;font-weight:800;letter-spacing:.06em;position:sticky;top:0;z-index:100">ENTORNO DE PRUEBAS · DATOS NO REALES · WAREHOUSE v1.15 TEST</div>
+  <div style="background:#8b261f;color:white;text-align:center;padding:10px;font-weight:800;letter-spacing:.06em;position:sticky;top:0;z-index:100">ENTORNO DE PRUEBAS · DATOS NO REALES · WAREHOUSE v1.16 TEST</div>
   <header class="topbar"><div class="topbar-inner">
     <div class="brand"><div class="brand-mark" aria-hidden="true">L</div><div><small>LEVITEC · SITE CONTROL</small><strong>Warehouse</strong></div></div>
     <div id="identity" class="identity" hidden>
@@ -1057,47 +1057,77 @@
     function renderLogisticsCart(){
       $('logisticsCart').innerHTML=logisticsCart.length?'<h3>Materiales de la operación · '+logisticsCart.length+' líneas</h3>'+logisticsCart.map((x,i)=>'<div class="line"><div class="line-title"><b>'+esc(x.reference)+' · '+esc(x.description)+'</b><button class="button secondary small" onclick="removeLogisticsLine('+i+')">Quitar</button></div><p>'+esc(x.quantity)+' '+esc(x.unit)+' · '+(x.qrCode?'QR verificado':'Sin QR')+' · propietario '+esc(x.ownerProject)+' · '+esc(logisticsZoneName(x.originZone))+' → '+esc(logisticsZoneName(x.destinationZone))+'</p></div>').join(''):'<p class="muted">Añade los materiales que deseas trasladar.</p>';
     }
+    const V116_PENDING_KEY='levitec_warehouse_pending_operation_v116';
+    function v116Pending(){try{return JSON.parse(sessionStorage.getItem(V116_PENDING_KEY)||'null')}catch{return null}}
+    function v116Store(op){sessionStorage.setItem(V116_PENDING_KEY,JSON.stringify(op))}
+    function v116Clear(){sessionStorage.removeItem(V116_PENDING_KEY)}
+    function v116UnlockUi(){const btn=$('lSubmit');if(btn){btn.disabled=false;btn.textContent='Crear operación con los materiales añadidos'}}
+    async function v116CheckPending(){
+      const op=v116Pending();if(!op)return true;
+      status('Verificando la última operación '+op.id+' antes de permitir otro envío…','info');
+      try{
+        const stateOnServer=await call('operationStatusV116',{clientId:op.id});
+        if(stateOnServer.exists){v116Clear();pendingLogisticsClientId='';logisticsCart=[];renderLogisticsCart();$('lNote').value='';
+          status('Operación '+op.id+' confirmada en servidor ('+stateOnServer.status+'). No se ha duplicado.','success');
+          refresh().catch(()=>{});return false;
+        }
+        // Respuesta inequívoca de no existencia: la selección puede reintentarse con el mismo ID.
+        status('La operación anterior no consta registrada. Puedes reintentar con el mismo identificador.','info');
+        pendingLogisticsClientId=op.id;v116Clear();return true;
+      }catch(e){status('No se puede determinar si se registró '+op.id+'. No vuelvas a enviarla. Vuelve a pulsar Crear para verificar de nuevo: '+e.message,'error');return false}
+    }
     async function submitLogistics(){
       if(actionBusy)return;
-      const mode=logisticsFlow==='INTERNAL'?'INTERNA':$('lMode').value,originWarehouse=$('lOrigin').value,destinationWarehouse=logisticsFlow==='INTERNAL'?originWarehouse:$('lDestination').value;
-      if(logisticsFlow!=='INTERNAL'&&originWarehouse===destinationWarehouse)return throwFailLogistics('Elige dos almacenes distintos.');
-      // El almacén de la cabecera es únicamente un contexto de consulta.
-      // El origen operativo lo decide el usuario y lo autoriza el servidor.
-      if(!logisticsCart.length)return throwFailLogistics('Añade al menos un material a la operación.');
-      // v1.15: comprobar contra catálogo actualizado, no el snapshot al preparar el carrito.
-      // Las reservas pendientes no se imputan al carrito ni crean eventos de stock.
-      let latest;
-      try {
-        latest=await call('logisticsCatalog',{originWarehouse,destinationWarehouse,project:LOGISTICS_WORKS[destinationWarehouse]||''});
-      } catch(e){return throwFailLogistics('No se puede validar el stock actualizado. No se ha enviado la operación: '+e.message);}
-      const sums={};
-      for(const line of logisticsCart){
-        const k=[line.materialId,line.ownerProject,line.originZone].join('|');
-        sums[k]=(sums[k]||0)+Number(line.quantity);
-      }
-      const shortages=[];
-      Object.entries(sums).forEach(([key,asked])=>{
-        const row=(latest.stock||[]).find(r=>[r.materialId,r.ownerProject,r.zone].join('|')===key);
-        const available=Number(row?.quantity||0);
-        if(asked>available+1e-8){
-          const item=logisticsCart.find(l=>[l.materialId,l.ownerProject,l.originZone].join('|')===key);
-          shortages.push((item?.reference||key)+' en '+(latest.zones||[]).find(z=>z.code===item?.originZone)?.name+': solicitas '+asked+' ud.; stock actual '+available+' ud.');
-        }
-      });
-      logisticsCatalogState=latest;
-      if(shortages.length){
-        logisticsMaterialChoices();
-        return throwFailLogistics('No se ha registrado la operación. Revisa el carrito: '+shortages.join(' | ')+'. Elimina o reduce las líneas y vuelve a intentar.');
-      }
-      const data={clientId:pendingLogisticsClientId||(pendingLogisticsClientId='LOGCLIENT-'+crypto.randomUUID()),mode,originWarehouse,destinationWarehouse,project:LOGISTICS_WORKS[destinationWarehouse]||'',note:$('lNote').value.trim(),lines:logisticsCart.map(x=>({materialId:x.materialId,originZone:x.originZone,destinationZone:x.destinationZone,ownerProject:x.ownerProject,quantity:x.quantity,qrCode:x.qrCode}))};
-      if(!confirm('¿Crear '+(mode==='INTERNA'?'movimiento interno':mode==='DIRECTA'?'expedición':'solicitud')+' con '+logisticsCart.length+' líneas hacia '+destinationWarehouse+'?'))return;
-      actionBusy=true;const btn=$('lSubmit');btn.disabled=true;btn.textContent='Registrando operación…';
+      actionBusy=true;const btn=$('lSubmit');btn.disabled=true;btn.textContent='Verificando operación…';
       try{
-        const r=await call(mode==='INTERNA'?'internalLogisticsBatch':'createLogistics',data);
-        if(mode==='DIRECTA'&&!r.requiresApproval)await call('dispatchLogistics',{id:r.id});
-        pendingLogisticsClientId='';logisticsCart=[];renderLogisticsCart();$('lNote').value='';
-        await afterSave(r.requiresApproval?'Operación '+r.id+' pendiente de autorización por material protegido.':'Operación '+r.id+' registrada.','logistics');
-      }catch(e){fail(e)}finally{actionBusy=false;btn.disabled=false;btn.textContent='Crear operación con los materiales añadidos'}
+        if(!(await v116CheckPending()))return;
+        const mode=logisticsFlow==='INTERNAL'?'INTERNA':$('lMode').value;
+        const originWarehouse=$('lOrigin').value,destinationWarehouse=logisticsFlow==='INTERNAL'?originWarehouse:$('lDestination').value;
+        if(logisticsFlow!=='INTERNAL'&&originWarehouse===destinationWarehouse)throw Error('Elige dos almacenes distintos.');
+        if(!logisticsCart.length)throw Error('Añade al menos un material a la operación.');
+        const latest=await call('logisticsCatalog',{originWarehouse,destinationWarehouse,project:LOGISTICS_WORKS[destinationWarehouse]||''});
+        const sums={};for(const line of logisticsCart){const k=[line.materialId,line.ownerProject,line.originZone].join('|');sums[k]=(sums[k]||0)+Number(line.quantity)}
+        const shortages=[];
+        Object.entries(sums).forEach(([key,asked])=>{
+          const row=(latest.stock||[]).find(r=>[r.materialId,r.ownerProject,r.zone].join('|')===key);
+          const available=Number(row?.quantity||0);
+          if(asked>available+1e-8){const item=logisticsCart.find(l=>[l.materialId,l.ownerProject,l.originZone].join('|')===key);
+            const zone=(latest.zones||[]).find(z=>z.code===item?.originZone)?.name||item?.originZone||'';
+            shortages.push((item?.reference||key)+' en '+zone+': solicitas '+asked+' ud.; disponibles '+available+' ud.');}
+        });
+        logisticsCatalogState=latest;
+        if(shortages.length){logisticsMaterialChoices();throw Error('No se ha enviado la operación. Corrige las líneas: '+shortages.join(' | '));}
+        const data={clientId:pendingLogisticsClientId||(pendingLogisticsClientId='LOGCLIENT-'+crypto.randomUUID()),mode,originWarehouse,destinationWarehouse,project:LOGISTICS_WORKS[destinationWarehouse]||'',note:$('lNote').value.trim(),lines:logisticsCart.map(x=>({materialId:x.materialId,originZone:x.originZone,destinationZone:x.destinationZone,ownerProject:x.ownerProject,quantity:x.quantity,qrCode:x.qrCode}))};
+        if(!confirm('¿Crear '+(mode==='INTERNA'?'movimiento interno':mode==='DIRECTA'?'expedición':'solicitud')+' con '+logisticsCart.length+' líneas?'))return;
+        // Se guarda ANTES de enviar. Si se pierde la respuesta, solo se permite consultar el estado.
+        const frozen={id:data.clientId,mode,originWarehouse,destinationWarehouse,createdAt:Date.now()};v116Store(frozen);
+        btn.textContent='Registrando…';status('Registrando '+data.clientId+'. No repitas la operación.','info');
+        let r;
+        try{r=await call(mode==='INTERNA'?'internalLogisticsBatch':'createLogistics',data)}
+        catch(e){
+          // Si el servidor rechazó explícitamente la petición, la consulta debe decidir si existe.
+          btn.textContent='Verificando resultado…';
+          let checked;
+          try{checked=await call('operationStatusV116',{clientId:data.clientId})}
+          catch(checkError){throw Error('Resultado desconocido para '+data.clientId+'. No repitas el envío: '+checkError.message)}
+          if(!checked.exists){v116Clear();pendingLogisticsClientId='';throw e}
+          r={id:data.clientId,recovered:true,status:checked.status,requiresApproval:checked.status==='PENDIENTE_APROBACION'};
+        }
+        // Para DIRECTA, createLogistics pudo confirmarse sin finalizar dispatch.
+        // Nunca volver a crear esa solicitud en un segundo clic.
+        if(mode==='DIRECTA'&&!r.requiresApproval&&(!r.status||r.status==='SOLICITADO')){
+          btn.textContent='Confirmando expedición…';
+          try{await call('dispatchLogistics',{id:r.id})}
+          catch(e){
+            v116Clear();pendingLogisticsClientId='';logisticsCart=[];renderLogisticsCart();
+            status('Operación '+r.id+' creada; no se ha podido confirmar la expedición automáticamente. Comprueba su estado en Seguimiento antes de actuar: '+e.message,'error');
+            refresh().catch(()=>{});return;
+          }
+        }
+        v116Clear();pendingLogisticsClientId='';logisticsCart=[];renderLogisticsCart();$('lNote').value='';
+        status('Operación '+r.id+' registrada. Actualizando información en segundo plano…','success');
+        refresh().then(()=>status('Operación '+r.id+' registrada y datos actualizados.','success')).catch(()=>status('Operación '+r.id+' registrada; actualización pendiente. Pulsa Actualizar.','info'));
+      }catch(e){fail(e)}finally{actionBusy=false;v116UnlockUi()}
     }
     function throwFailLogistics(message){status(message,'error');return null}
     function renderLogistics(){
@@ -1115,7 +1145,14 @@
         if(statusName==='SOLICITADO'&&canDispatch)actions='<button class="button small" data-id="'+esc(id)+'" onclick="logisticsAction(this.dataset.id,&quot;dispatch&quot;)">Confirmar expedición</button> <button class="button secondary small" data-id="'+esc(id)+'" onclick="logisticsAction(this.dataset.id,&quot;cancel&quot;)">Cancelar</button>';
         if(statusName==='EN_TRANSITO'&&canReceive)actions='<button class="button small" data-id="'+esc(id)+'" onclick="logisticsAction(this.dataset.id,&quot;receive&quot;)">Confirmar recepción</button>';
         return '<div class="line"><div class="line-title"><h3>Operación '+esc(id)+' · '+esc(r.PROYECTO)+'</h3><span class="pill '+(statusName==='RECIBIDO'?'received':'pending')+'">'+esc(statusName)+'</span></div><p>'+esc(r.ORIGEN_ALMACEN)+' → '+esc(r.DESTINO_ALMACEN)+' · '+esc(r.MODO)+' · '+lines.length+' líneas</p>'+lines.map(x=>'<p>'+esc(x.REFERENCIA)+' · '+esc(x.CANTIDAD)+' '+esc(x.UNIDAD)+' · '+esc(zoneLabel(x.ORIGEN_ZONA))+' → '+esc(zoneLabel(x.DESTINO_ZONA))+(x.PROYECTO_ORIGEN&&x.PROYECTO_ORIGEN!==x.PROYECTO?' · origen imputado '+esc(x.PROYECTO_ORIGEN):'')+'</p>').join('')+(lines.some(x=>x.INCIDENCIA)?'<p class="notice warning">'+esc(lines.map(x=>x.INCIDENCIA).filter(Boolean).join(' | '))+'</p>':'')+'<div class="actions">'+actions+'</div></div>';
-      }).join(''):'<p class="muted">Todavía no hay operaciones logísticas.</p>';
+      }).join(''):'<p class="muted">No hay traslados ni consumos.</p>';
+      // Movimientos internos se conservan en EVENTOS, no en MOVIMIENTOS_LOGISTICOS.
+      // Mostrar trazabilidad real en el mismo seguimiento, sin inventar estados.
+      const internalEvents=(state.movements||[]).filter(x=>x.TIPO==='MOVIMIENTO'&&String(x.ID_LOTE||'').startsWith('LOGCLIENT-'));
+      if(internalEvents.length){
+        const buckets=new Map();internalEvents.forEach(x=>{if(!buckets.has(x.ID_LOTE))buckets.set(x.ID_LOTE,[]);buckets.get(x.ID_LOTE).push(x)});
+        $('logisticsList').insertAdjacentHTML('beforeend','<h3 style="margin:18px 0 8px">Movimientos internos registrados</h3>'+[...buckets.entries()].map(([id,lines])=>'<div class="line"><div class="line-title"><b>Operación '+esc(id)+'</b><span class="pill received">REGISTRADO</span></div>'+lines.map(x=>'<p>'+esc(x.DESCRIPCION)+' · '+esc(x.CANTIDAD)+' '+esc(x.UNIDAD)+' · '+esc(zoneLabel(x.ORIGEN))+' → '+esc(zoneLabel(x.DESTINO))+' · '+esc(x.PROYECTO)+' · '+esc(String(x.FECHA||'').slice(0,16).replace('T',' '))+'</p>').join('')+'</div>').join(''));
+      }
     }
     let pendingLogisticsReceipt=null;
     function closeLogisticsReceipt(){const m=$('logisticsReceiveModal');m.hidden=true;m.style.display='none';pendingLogisticsReceipt=null;}
@@ -1163,7 +1200,7 @@
         state.zoneMapSupported=Array.isArray(state.zoneMap);
         state.zoneMap=state.zoneMap||[];
 
-        let backendMismatch=state.apiVersion&&state.apiVersion!=='1.15-test';
+        let backendMismatch=state.apiVersion&&state.apiVersion!=='1.16-test';
 
         $('login').hidden=true;
         $('app').hidden=false;
