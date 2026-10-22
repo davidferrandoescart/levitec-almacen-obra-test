@@ -170,7 +170,7 @@
   </style>
 </head>
 <body>
-  <div style="background:#8b261f;color:white;text-align:center;padding:10px;font-weight:800;letter-spacing:.06em;position:sticky;top:0;z-index:100">ENTORNO DE PRUEBAS · DATOS NO REALES · WAREHOUSE v1.16 TEST</div>
+  <div style="background:#8b261f;color:white;text-align:center;padding:10px;font-weight:800;letter-spacing:.06em;position:sticky;top:0;z-index:100">ENTORNO DE PRUEBAS · DATOS NO REALES · WAREHOUSE v1.17 TEST</div>
   <header class="topbar"><div class="topbar-inner">
     <div class="brand"><div class="brand-mark" aria-hidden="true">L</div><div><small>LEVITEC · SITE CONTROL</small><strong>Warehouse</strong></div></div>
     <div id="identity" class="identity" hidden>
@@ -905,7 +905,7 @@
       try{let r=await call('getStock',{warehouseId:requestedWarehouse});if(epoch!==warehouseEpoch||r.currentWarehouse?.id!==requestedWarehouse)return;state.stock=r.stock;if($('stockScope')?.value==='GLOBAL')loadStockScope();state.movements=r.movements;state.zones=r.zones||state.zones;state.materials=r.materials||state.materials;state.zoneMap=r.zoneMap||state.zoneMap||[];state.projectRules=r.projectRules||state.projectRules||[];state.transfers=r.transfers||[];state.lots=r.lots||state.lots||[];state.materialPolicies=r.materialPolicies||[];state.transferRequests=r.transferRequests||[];state.siteMaterialRequests=r.siteMaterialRequests||[];state.siteOrders=r.siteOrders||[];state.receiptIncidents=r.receiptIncidents||[];state.logistics=r.logistics||[];renderLogistics();renderSiteOrderSelector();renderReceiptIncidents();state.currentWarehouse=r.currentWarehouse||state.currentWarehouse;state.zoneMapSupported=Array.isArray(r.zoneMap);
         setChoices('rZone',state.zones.filter(z=>z.AREA==='ALMACEN'),'CODIGO','NOMBRE');receiptZoneHint();setChoices('mOrigin',state.zones.filter(z=>z.AREA==='ALMACEN'),'CODIGO','NOMBRE');setChoices('mDestination',state.zones,'CODIGO','NOMBRE');
         setChoices('stockProject',state.projects,'CODIGO','CODIGO','Todos');setChoices('stockZone',state.zones.filter(z=>z.AREA==='ALMACEN'),'CODIGO','NOMBRE','Todas');
-        renderSummary();renderStock();renderLogistics();renderMoves();renderTransfers();renderMap();renderQuality();available();applyProjectRule();updateReceiptSuggestions();if(manual)status('Datos actualizados.')}
+        renderSummary();renderStock();renderLogistics();renderMoves();renderTransfers();renderMap();renderQuality();available();applyProjectRule();updateReceiptSuggestions();if(manual){await logisticsChoices();status('Datos y buscador actualizados.')}}
       catch(e){if(manual)fail(e);else throw e}}
     async function afterSave(message,target){status(message);try{await refresh()}catch(e){status(message+' No se han podido actualizar las listas: pulsa Actualizar.','info')}view(target,false)}
     function renderReceiptIncidents(){
@@ -1126,7 +1126,15 @@
         }
         v116Clear();pendingLogisticsClientId='';logisticsCart=[];renderLogisticsCart();$('lNote').value='';
         status('Operación '+r.id+' registrada. Actualizando información en segundo plano…','success');
-        refresh().then(()=>status('Operación '+r.id+' registrada y datos actualizados.','success')).catch(()=>status('Operación '+r.id+' registrada; actualización pendiente. Pulsa Actualizar.','info'));
+        // Refrescar AMBAS fuentes: getStock alimenta Existencias/Historial,
+        // logisticsCatalog alimenta el buscador operativo. Nunca dejar el
+        // buscador con cantidades de antes de la operación confirmada.
+        // Invalidar respuestas de búsquedas antiguas ya en vuelo.
+        ++logisticsFetchSerial;
+        Promise.allSettled([refresh(), logisticsChoices()]).then(results=>{
+          const failed=results.some(x=>x.status==='rejected');
+          status(failed?'Operación '+r.id+' registrada. Alguna consulta no se actualizó: usa Actualizar antes de preparar otra operación.':'Operación '+r.id+' registrada; existencias, buscador e historial actualizados.',failed?'info':'success');
+        });
       }catch(e){fail(e)}finally{actionBusy=false;v116UnlockUi()}
     }
     function throwFailLogistics(message){status(message,'error');return null}
@@ -1151,7 +1159,7 @@
       const internalEvents=(state.movements||[]).filter(x=>x.TIPO==='MOVIMIENTO'&&String(x.ID_LOTE||'').startsWith('LOGCLIENT-'));
       if(internalEvents.length){
         const buckets=new Map();internalEvents.forEach(x=>{if(!buckets.has(x.ID_LOTE))buckets.set(x.ID_LOTE,[]);buckets.get(x.ID_LOTE).push(x)});
-        $('logisticsList').insertAdjacentHTML('beforeend','<h3 style="margin:18px 0 8px">Movimientos internos registrados</h3>'+[...buckets.entries()].map(([id,lines])=>'<div class="line"><div class="line-title"><b>Operación '+esc(id)+'</b><span class="pill received">REGISTRADO</span></div>'+lines.map(x=>'<p>'+esc(x.DESCRIPCION)+' · '+esc(x.CANTIDAD)+' '+esc(x.UNIDAD)+' · '+esc(zoneLabel(x.ORIGEN))+' → '+esc(zoneLabel(x.DESTINO))+' · '+esc(x.PROYECTO)+' · '+esc(String(x.FECHA||'').slice(0,16).replace('T',' '))+'</p>').join('')+'</div>').join(''));
+        $('logisticsList').insertAdjacentHTML('afterbegin','<h3 style="margin:18px 0 8px">Movimientos internos registrados (eventos confirmados)</h3>'+[...buckets.entries()].map(([id,lines])=>'<div class="line"><div class="line-title"><b>Operación '+esc(id)+'</b><span class="pill received">REGISTRADO</span></div>'+lines.map(x=>'<p>'+esc(x.DESCRIPCION)+' · '+esc(x.CANTIDAD)+' '+esc(x.UNIDAD)+' · '+esc(zoneLabel(x.ORIGEN))+' → '+esc(zoneLabel(x.DESTINO))+' · '+esc(x.PROYECTO)+' · '+esc(String(x.FECHA||'').slice(0,16).replace('T',' '))+'</p>').join('')+'</div>').join(''));
       }
     }
     let pendingLogisticsReceipt=null;
