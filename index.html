@@ -1061,7 +1061,8 @@
       if(actionBusy)return;
       const mode=logisticsFlow==='INTERNAL'?'INTERNA':$('lMode').value,originWarehouse=$('lOrigin').value,destinationWarehouse=logisticsFlow==='INTERNAL'?originWarehouse:$('lDestination').value;
       if(logisticsFlow!=='INTERNAL'&&originWarehouse===destinationWarehouse)return throwFailLogistics('Elige dos almacenes distintos.');
-      if(mode==='DIRECTA'&&originWarehouse!==state.currentWarehouse?.id)return throwFailLogistics('Para salida directa, selecciona primero '+originWarehouse+' como ubicación logística en la cabecera.');
+      // El almacén de la cabecera es únicamente un contexto de consulta.
+      // El origen operativo lo decide el usuario y lo autoriza el servidor.
       if(!logisticsCart.length)return throwFailLogistics('Añade al menos un material a la operación.');
       const data={clientId:pendingLogisticsClientId||(pendingLogisticsClientId='LOGCLIENT-'+crypto.randomUUID()),mode,originWarehouse,destinationWarehouse,project:LOGISTICS_WORKS[destinationWarehouse]||'',note:$('lNote').value.trim(),lines:logisticsCart.map(x=>({materialId:x.materialId,originZone:x.originZone,destinationZone:x.destinationZone,ownerProject:x.ownerProject,quantity:x.quantity,qrCode:x.qrCode}))};
       if(!confirm('¿Crear '+(mode==='INTERNA'?'movimiento interno':mode==='DIRECTA'?'expedición':'solicitud')+' con '+logisticsCart.length+' líneas hacia '+destinationWarehouse+'?'))return;
