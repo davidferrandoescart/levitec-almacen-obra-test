@@ -170,7 +170,7 @@
   </style>
 </head>
 <body>
-  <div style="background:#8b261f;color:white;text-align:center;padding:10px;font-weight:800;letter-spacing:.06em;position:sticky;top:0;z-index:100">ENTORNO DE PRUEBAS · DATOS NO REALES · WAREHOUSE v1.8 TEST</div>
+  <div style="background:#8b261f;color:white;text-align:center;padding:10px;font-weight:800;letter-spacing:.06em;position:sticky;top:0;z-index:100">ENTORNO DE PRUEBAS · DATOS NO REALES · WAREHOUSE v1.11 TEST</div>
   <header class="topbar"><div class="topbar-inner">
     <div class="brand"><div class="brand-mark" aria-hidden="true">L</div><div><small>LEVITEC · SITE CONTROL</small><strong>Warehouse</strong></div></div>
     <div id="identity" class="identity" hidden>
@@ -440,7 +440,7 @@
       }
       const groups=new Map();rows.forEach(x=>{const key=x.materialId||x.reference;let g=groups.get(key);if(!g){g={...x,total:0,positions:[]};groups.set(key,g)}g.total+=Number(x.quantity);g.positions.push(x)});
       $('stockCount').textContent=groups.size+' referencias · '+rows.length+' posiciones';
-      $('stockRows').innerHTML=[...groups.values()].map(g=>'<tr><td><details><summary><strong>'+esc(g.description)+'</strong> · '+g.positions.length+' ubicaciones</summary><div style="padding:8px 0">'+g.positions.map(x=>'<div>'+esc((x.warehouseName||state.currentWarehouse?.name||'')+' / '+zoneLabel(x.zone)+' · '+x.project+' — '+x.quantity+' '+x.unit)+'</div>').join('')+'</div></details></td><td>'+esc(g.reference||'—')+'</td><td>Varios / desglose</td><td>'+g.positions.length+' posiciones</td><td class="right"><strong>'+Math.round(g.total*1000)/1000+' '+esc(g.unit)+'</strong></td></tr>').join('');
+      $('stockRows').innerHTML=[...groups.values()].map(g=>'<tr><td><details><summary><strong>'+esc(g.description)+'</strong> · '+g.positions.length+' ubicaciones</summary><div style="padding:8px 0">'+g.positions.map(x=>'<div>'+esc((x.warehouseName||state.currentWarehouse?.name||'')+' / '+zoneLabel(x.zone)+' · '+x.project+' — '+x.quantity+' '+x.unit)+'</div>').join('')+'</div></details></td><td>'+esc(g.reference||'—')+'</td><td>'+esc([...new Set(g.positions.map(x=>x.project).filter(Boolean))].length===1?g.positions[0].project:'Varios / desglose')+'</td><td>'+g.positions.length+' posiciones</td><td class="right"><strong>'+Math.round(g.total*1000)/1000+' '+esc(g.unit)+'</strong></td></tr>').join('');
     }
 
     const SVG_NS='http://www.w3.org/2000/svg';
