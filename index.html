@@ -170,7 +170,7 @@
   </style>
 </head>
 <body>
-  <div style="background:#8b261f;color:white;text-align:center;padding:10px;font-weight:800;letter-spacing:.06em;position:sticky;top:0;z-index:100">ENTORNO DE PRUEBAS · DATOS NO REALES · WAREHOUSE v1.11 TEST</div>
+  <div style="background:#8b261f;color:white;text-align:center;padding:10px;font-weight:800;letter-spacing:.06em;position:sticky;top:0;z-index:100">ENTORNO DE PRUEBAS · DATOS NO REALES · WAREHOUSE v1.12 TEST</div>
   <header class="topbar"><div class="topbar-inner">
     <div class="brand"><div class="brand-mark" aria-hidden="true">L</div><div><small>LEVITEC · SITE CONTROL</small><strong>Warehouse</strong></div></div>
     <div id="identity" class="identity" hidden>
@@ -193,7 +193,6 @@
       <button class="tab" type="button" data-view="logistics" onclick="view('logistics')">Operaciones <span id="navLogistics"></span></button>
       <button class="tab" type="button" data-view="moves" onclick="view('moves')">Movimientos <span id="navPending"></span></button>
       <button class="tab write" type="button" data-view="receipt" onclick="view('receipt')">Nueva recepción</button>
-      <button class="tab write" type="button" data-view="transfer" onclick="view('logistics');selectLogisticsFlow('INTERNAL')">Mover material</button>
     </nav>
     <div id="status" class="flash" role="status" aria-live="polite" hidden></div>
     <section id="stock">
@@ -634,11 +633,11 @@
         setChoices('mDestination',state.zones,'CODIGO','NOMBRE');setChoices('stockZone',state.zones.filter(z=>z.AREA==='ALMACEN'),'CODIGO','NOMBRE','Todas');
         renderMap();$('zonePick').value=r.code;loadZoneEditor();selectMapZone(r.code);status('Zona '+r.code+' guardada en el plano.')}
       catch(e){fail(e)}finally{zoneSaving=false;$('zoneSave').disabled=false}}
-    function renderTransfers(){let rows=state.transfers||[],pending=rows.filter(x=>x.ESTADO==='PENDIENTE_COMPENSAR');$('policyPanel').hidden=!['ADMIN','JEFE'].includes(state.user?.role);if(!$('policyPanel').hidden){setChoices('policyMaterial',(state.materials||[]).map(m=>({ID:m.ID,LABEL:(m.REFERENCIA||'SIN REF')+' · '+m.DESCRIPCION})),'ID','LABEL','Selecciona material');setChoices('policyProject',state.projects||[],'CODIGO','CODIGO','Selecciona proyecto')};let policies=(state.materialPolicies||[]).filter(p=>p.CRITICIDAD&&p.CRITICIDAD!=='NORMAL');$('policyList').innerHTML=policies.length?'<strong>Protecciones activas:</strong><br>'+policies.map(p=>{let m=(state.materials||[]).find(x=>x.ID===p.MATERIAL_ID);return esc((m?.REFERENCIA||p.MATERIAL_ID)+' · '+p.PROYECTO+' · '+p.CRITICIDAD+' · reserva '+p.RESERVA_MINIMA+(p.FECHA_NECESIDAD?' · necesidad '+p.FECHA_NECESIDAD:''))}).join('<br>'):'Sin reservas críticas configuradas.';$('navTransfers').textContent=pending.length?'· '+pending.length:'';
+    function renderTransfers(){let rows=state.transfers||[],pending=rows.filter(x=>['PENDIENTE_COMPENSAR','LOGISTICA_PENDIENTE_COMPENSAR'].includes(x.ESTADO));$('policyPanel').hidden=!['ADMIN','JEFE'].includes(state.user?.role);if(!$('policyPanel').hidden){setChoices('policyMaterial',(state.materials||[]).map(m=>({ID:m.ID,LABEL:(m.REFERENCIA||'SIN REF')+' · '+m.DESCRIPCION})),'ID','LABEL','Selecciona material');setChoices('policyProject',state.projects||[],'CODIGO','CODIGO','Selecciona proyecto')};let policies=(state.materialPolicies||[]).filter(p=>p.CRITICIDAD&&p.CRITICIDAD!=='NORMAL');$('policyList').innerHTML=policies.length?'<strong>Protecciones activas:</strong><br>'+policies.map(p=>{let m=(state.materials||[]).find(x=>x.ID===p.MATERIAL_ID);return esc((m?.REFERENCIA||p.MATERIAL_ID)+' · '+p.PROYECTO+' · '+p.CRITICIDAD+' · reserva '+p.RESERVA_MINIMA+(p.FECHA_NECESIDAD?' · necesidad '+p.FECHA_NECESIDAD:''))}).join('<br>'):'Sin reservas críticas configuradas.';$('navTransfers').textContent=pending.length?'· '+pending.length:'';
       $('projectTransferEmpty').hidden=rows.length>0;
       let balances=new Map();pending.forEach(x=>{let key=[x.PROYECTO_ORIGEN,x.PROYECTO_DESTINO,x.MATERIAL_ID].join('|'),g=balances.get(key)||{from:x.PROYECTO_ORIGEN,to:x.PROYECTO_DESTINO,description:x.DESCRIPCION,unit:x.UNIDAD,quantity:0};g.quantity+=Number(x.CANTIDAD||0);balances.set(key,g)});
       $('transferBalance').innerHTML=balances.size?'<strong>Pendiente de compensar</strong><br>'+[...balances.values()].map(x=>esc(x.to)+' debe a '+esc(x.from)+': '+esc(Math.round(x.quantity*1000)/1000)+' '+esc(x.unit)+' · '+esc(x.description)).join('<br>'):'No hay saldos pendientes de compensar entre proyectos.';
-      $('projectTransferRows').innerHTML=rows.map(x=>'<tr><td data-label="Fecha">'+esc(String(x.FECHA||'').slice(0,16).replace('T',' '))+'</td><td data-label="Material"><strong>'+esc(x.DESCRIPCION)+'</strong><small>'+esc((state.materials||[]).find(m=>m.ID===x.MATERIAL_ID)?.REFERENCIA||x.MATERIAL_ID)+'</small></td><td data-label="De">'+esc(x.PROYECTO_ORIGEN)+'</td><td data-label="A">'+esc(x.PROYECTO_DESTINO)+'</td><td data-label="Zona">'+esc(x.ZONA)+'</td><td data-label="Cantidad" class="right"><span class="qty">'+esc(x.CANTIDAD)+' '+esc(x.UNIDAD)+'</span></td><td data-label="Estado"><span class="pill '+(x.ESTADO==='PENDIENTE_COMPENSAR'?'pending':'received')+'">'+esc(x.ESTADO)+'</span></td><td data-label="Acción" class="right">'+((['ADMIN','JEFE'].includes(state.user?.role)&&x.ESTADO==='PENDIENTE_COMPENSAR')?'<button type="button" class="button small secondary" data-id="'+esc(x.ID_TRASPASO)+'" onclick="compensateTransfer(this.dataset.id)">Marcar compensado</button>':'')+'</td></tr>').join('')}
+      $('projectTransferRows').innerHTML=rows.map(x=>'<tr><td data-label="Fecha">'+esc(String(x.FECHA||'').slice(0,16).replace('T',' '))+'</td><td data-label="Material"><strong>'+esc(x.DESCRIPCION)+'</strong><small>'+esc((state.materials||[]).find(m=>m.ID===x.MATERIAL_ID)?.REFERENCIA||x.MATERIAL_ID)+'</small></td><td data-label="De">'+esc(x.PROYECTO_ORIGEN)+'</td><td data-label="A">'+esc(x.PROYECTO_DESTINO)+'</td><td data-label="Zona">'+esc(x.ZONA)+'</td><td data-label="Cantidad" class="right"><span class="qty">'+esc(x.CANTIDAD)+' '+esc(x.UNIDAD)+'</span></td><td data-label="Estado"><span class="pill '+(['PENDIENTE_COMPENSAR','LOGISTICA_PENDIENTE_COMPENSAR'].includes(x.ESTADO)?'pending':'received')+'">'+esc(x.ESTADO)+'</span></td><td data-label="Acción" class="right">'+((['ADMIN','JEFE'].includes(state.user?.role)&&['PENDIENTE_COMPENSAR','LOGISTICA_PENDIENTE_COMPENSAR'].includes(x.ESTADO))?'<button type="button" class="button small secondary" data-id="'+esc(x.ID_TRASPASO)+'" onclick="compensateTransfer(this.dataset.id)">Marcar compensado</button>':'')+'</td></tr>').join('')}
     async function compensateTransfer(id){if(actionBusy||!['ADMIN','JEFE'].includes(state.user?.role))return;if(!confirm('¿Marcar este traspaso como compensado?'))return;actionBusy=true;status('Actualizando traspaso…','info');try{await call('compensateProjectTransfer',{transferId:id});await afterSave('Traspaso marcado como compensado.','transfers')}catch(e){fail(e)}finally{actionBusy=false}}
     function renderMoves(){let q=normalize($('moveSearch').value),f=$('moveFilter').value,seen=new Set(),rows=(state.movements||[]).filter(x=>(!f||x.ESTADO===f)&&normalize([x.DESCRIPCION,x.ID_LOTE,x.PROYECTO,x.ORIGEN,x.DESTINO,x.DOCUMENTO_NUMERO,x.PROVEEDOR].join(' ')).includes(q));
       $('moveCount').textContent=rows.length+' movimientos visibles';$('moveEmpty').hidden=rows.length>0;
@@ -1062,7 +1061,7 @@
       if(actionBusy)return;
       const mode=logisticsFlow==='INTERNAL'?'INTERNA':$('lMode').value,originWarehouse=$('lOrigin').value,destinationWarehouse=logisticsFlow==='INTERNAL'?originWarehouse:$('lDestination').value;
       if(logisticsFlow!=='INTERNAL'&&originWarehouse===destinationWarehouse)return throwFailLogistics('Elige dos almacenes distintos.');
-      if(mode==='DIRECTA'&&originWarehouse!==state.currentWarehouse?.id)return throwFailLogistics('Para salida directa, selecciona el almacén de origen en la cabecera.');
+      if(mode==='DIRECTA'&&originWarehouse!==state.currentWarehouse?.id)return throwFailLogistics('Para salida directa, selecciona primero '+originWarehouse+' como ubicación logística en la cabecera.');
       if(!logisticsCart.length)return throwFailLogistics('Añade al menos un material a la operación.');
       const data={clientId:pendingLogisticsClientId||(pendingLogisticsClientId='LOGCLIENT-'+crypto.randomUUID()),mode,originWarehouse,destinationWarehouse,project:LOGISTICS_WORKS[destinationWarehouse]||'',note:$('lNote').value.trim(),lines:logisticsCart.map(x=>({materialId:x.materialId,originZone:x.originZone,destinationZone:x.destinationZone,ownerProject:x.ownerProject,quantity:x.quantity,qrCode:x.qrCode}))};
       if(!confirm('¿Crear '+(mode==='INTERNA'?'movimiento interno':mode==='DIRECTA'?'expedición':'solicitud')+' con '+logisticsCart.length+' líneas hacia '+destinationWarehouse+'?'))return;
@@ -1237,6 +1236,7 @@
 
         applyWarehouseIdentity();
         hydrateWarehouseControls();
+        $('lOrigin').value=state.currentWarehouse?.id||'';
         selectLogisticsFlow('TRANSFER');renderLogistics();
 
         $('receiptLines').replaceChildren();
