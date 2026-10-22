@@ -327,12 +327,12 @@
         <label class="field" id="lProjectField" hidden><span>Proyecto consumidor (automático)</span><select id="lProject" disabled></select></label>
         <label class="field"><span>Filtrar por zona (opcional)</span><select id="lOriginZone" onchange="logisticsMaterialChoices()"></select></label>
         <label class="field"><span>Zona destino</span><select id="lDestinationZone"></select></label>
-        <label class="field"><span>Buscar material</span><input id="lSearch" type="search" oninput="logisticsMaterialChoices()" placeholder="Escribe para filtrar materiales…"></label><div class="field" style="grid-column:1/-1"><span>Material disponible · Selecciona una posición de stock</span><div id="lMaterialResults" style="max-height:350px;overflow:auto"></div><select id="lMaterial" hidden aria-label="Material seleccionado"></select></div>
-        <div class="field" style="grid-column:1/-1"><span>Identificación QR del material seleccionado</span><div style="display:flex;gap:8px;flex-wrap:wrap"><input style="flex:1;min-width:190px" id="lQr" placeholder="Escanea o introduce el QR" oninput="validateLogisticsQr()"><button type="button" class="button secondary" onclick="scanQr(true)">▣ Escanear QR</button><button type="button" class="button secondary" onclick="validateLogisticsQr()">Verificar</button></div><small id="lQrStatus">Selecciona primero un material y verifica su etiqueta QR.</small></div><label class="field"><span>Cantidad</span><input id="lQty" type="number" step="0.001" min="0.001" placeholder="0"></label>
+        <label class="field"><span>Buscar material</span><input id="lSearch" type="search" oninput="logisticsMaterialChoices()" placeholder="Buscar referencia, descripción, proveedor, diámetro, zona…"></label><div class="field" style="grid-column:1/-1"><span>Material disponible · Selecciona una posición de stock</span><div id="lMaterialResults" style="max-height:350px;overflow:auto"></div><select id="lMaterial" hidden aria-label="Material seleccionado"></select></div>
+        <div class="field" style="grid-column:1/-1"><span>Identificación QR (opcional)</span><div style="display:flex;gap:8px;flex-wrap:wrap"><input style="flex:1;min-width:190px" id="lQr" placeholder="Escanea o introduce el QR" oninput="validateLogisticsQr()"><button type="button" class="button secondary" onclick="scanQr(true)">▣ Escanear QR</button><button type="button" class="button secondary" onclick="validateLogisticsQr()">Verificar</button></div><small id="lQrStatus">Puedes continuar sin QR; si lo utilizas, comprueba su referencia.</small></div><label class="field"><span>Cantidad</span><input id="lQty" type="number" step="0.001" min="0.001" placeholder="0" oninput="validateLogisticsQuantity()"><small id="lQtyStatus" aria-live="polite">Selecciona un material para consultar su disponibilidad.</small></label>
         <label class="field"><span>Observaciones</span><input id="lNote" maxlength="250" placeholder="Motivo / zona de entrega"></label>
       </div>
-      <div class="form-footer"><button type="button" class="button secondary" onclick="addLogisticsLine()">+ Añadir material a la operación</button></div>
-      <div class="notice spacer">Puedes añadir varias referencias, cantidades, propietarios y zonas en una única operación. Verifica el QR de cada material antes de añadirlo. Los traslados entre almacenes conservan siempre el propietario. Las salidas confirmadas a OBRA consumen inmediatamente y solo generan compensación si el material pertenece a otro proyecto (excepto ANTIGUO). Elige una referencia y cantidad y pulsa «Añadir material». Puedes incluir distintas referencias y zonas de origen en una misma operación. La autorización solo se solicitará para referencias críticas o bloqueadas.</div>
+      <div class="form-footer"><button type="button" class="button secondary" id="lAdd" onclick="addLogisticsLine()">+ Añadir material a la operación</button></div>
+      <div class="notice spacer">Puedes añadir varias referencias, cantidades, propietarios y zonas en una única operación. El QR es opcional. Los traslados entre almacenes conservan siempre el propietario. Las salidas confirmadas a OBRA consumen inmediatamente y solo generan compensación si el material pertenece a otro proyecto (excepto ANTIGUO). Elige una referencia y cantidad y pulsa «Añadir material». Puedes incluir distintas referencias y zonas de origen en una misma operación. La autorización solo se solicitará para referencias críticas o bloqueadas.</div>
       <div id="logisticsCart" class="spacer"></div>
       <div class="form-footer"><button id="lSubmit" type="button" class="button" onclick="submitLogistics()">Crear operación con los materiales añadidos</button></div></div>
       <div class="divider"></div><h3>Seguimiento de movimientos</h3>
@@ -998,16 +998,47 @@
         }
       }catch(e){if(serial===logisticsFetchSerial)status('Error al consultar stock: '+e.message,'error')}
     }
+    function logisticsSearchNorm(v){
+      return String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[øØ]/g,'diametro').replace(/["″]/g,' pulgadas ').replace(/\b(pulgadas|pulgada|inch|inches|in)\b/g,' pulgada ').replace(/\b(tee|te|t)\b/g,' tee ').replace(/\b(reductora|reduccion|reducida|reducing)\b/g,' reducida ').replace(/[^a-z0-9/.]+/g,' ').replace(/\s+/g,' ').trim();
+    }
+    function logisticsZoneName(code){
+      const z=(logisticsCatalogState.zones||[]).find(x=>x.code===code);
+      return z?(z.name||code):zoneLabel(code);
+    }
     function logisticsMaterialChoices(){
-      const q=normalize($('lSearch')?.value||''),zone=$('lOriginZone').value,stock=logisticsCatalogState.stock||[];
-      const rows=stock.filter(x=>(!zone||x.zone===zone)&&normalize([x.reference,x.description,x.ownerProject,x.zone].join(' ')).includes(q));
+      const q=logisticsSearchNorm($('lSearch')?.value||''),terms=q.split(' ').filter(Boolean),zone=$('lOriginZone').value,stock=logisticsCatalogState.stock||[];
+      const rows=stock.filter(x=>{
+        if(zone&&x.zone!==zone)return false;
+        const corpus=logisticsSearchNorm([x.reference,x.description,x.ownerProject,x.zone,logisticsZoneName(x.zone),x.supplier,x.suppliers].join(' '));
+        return terms.every(t=>corpus.includes(t));
+      });
       const current=$('lMaterial').value;
       setChoices('lMaterial',rows.map(x=>({id:x.materialId+'|'+x.ownerProject+'|'+x.zone,label:x.reference})),'id','label','Selecciona material');
       if(rows.some(x=>x.materialId+'|'+x.ownerProject+'|'+x.zone===current))$('lMaterial').value=current;
+      else $('lMaterial').value='';
       const chosen=$('lMaterial').value;
-      $('lMaterialResults').innerHTML=rows.length?rows.slice(0,100).map(x=>{const id=x.materialId+'|'+x.ownerProject+'|'+x.zone,remaining=Math.max(0,Number(x.quantity)-(logisticsCart.filter(c=>c.materialId===x.materialId&&c.ownerProject===x.ownerProject&&c.originZone===x.zone).reduce((t,c)=>t+c.quantity,0)));return '<button type="button" class="button secondary" style="display:flex;width:100%;text-align:left;justify-content:space-between;gap:12px;margin:5px 0;white-space:normal;border:'+(chosen===id?'2px solid #157d70':'1px solid #ddd')+'" onclick="chooseLogisticsMaterial('+JSON.stringify(id).replace(/"/g,'&quot;')+')"><span><b>'+esc(x.reference)+'</b> · '+esc(x.description)+'<br><small>'+esc(x.zone)+' · Propietario: '+esc(x.ownerProject)+'</small></span><b style="white-space:nowrap">'+remaining+' '+esc(x.unit)+'</b></button>'}).join(''):'<p class="muted">No hay existencias coincidentes en el almacén de origen.</p>';
+      $('lMaterialResults').innerHTML=rows.length?rows.slice(0,100).map(x=>{
+        const id=x.materialId+'|'+x.ownerProject+'|'+x.zone;
+        const reserved=logisticsCart.filter(c=>c.materialId===x.materialId&&c.ownerProject===x.ownerProject&&c.originZone===x.zone).reduce((t,c)=>t+c.quantity,0);
+        const remaining=Math.max(0,Number(x.quantity)-reserved);
+        const vendor=x.supplier||x.suppliers||'Proveedor no registrado';
+        return '<button type="button" class="button secondary" style="display:flex;width:100%;text-align:left;justify-content:space-between;gap:12px;margin:5px 0;white-space:normal;border:'+(chosen===id?'2px solid #157d70':'1px solid #ddd')+'" onclick="chooseLogisticsMaterial('+JSON.stringify(id).replace(/"/g,'&quot;')+')"><span><b>'+esc(x.reference)+'</b> · '+esc(x.description)+'<br><small>'+esc(logisticsZoneName(x.zone))+' · Propietario: '+esc(x.ownerProject)+'</small><br><small>Proveedor: '+esc(vendor)+'</small></span><b style="white-space:nowrap">'+remaining+' '+esc(x.unit)+'</b></button>';
+      }).join(''):'<p class="muted">No se han encontrado existencias. Prueba con referencia, tipo, dimensión o proveedor.</p>';
+      validateLogisticsQuantity();
     }
-    function chooseLogisticsMaterial(id){$('lMaterial').value=id;logisticsQrValidated='';$('lQr').value='';$('lQrStatus').textContent='Verifica la etiqueta QR de la referencia seleccionada.';logisticsMaterialChoices()}
+    function validateLogisticsQuantity(){
+      const chosen=$('lMaterial').value;
+      const r=(logisticsCatalogState.stock||[]).find(x=>chosen===x.materialId+'|'+x.ownerProject+'|'+x.zone);
+      const el=$('lQtyStatus'),btn=$('lAdd');if(!el||!btn)return false;
+      if(!r){el.textContent='Selecciona una posición de stock.';el.style.color='#a24b1c';btn.disabled=true;return false;}
+      const reserved=logisticsCart.filter(c=>c.materialId===r.materialId&&c.ownerProject===r.ownerProject&&c.originZone===r.zone).reduce((t,c)=>t+c.quantity,0);
+      const available=Math.max(0,Number(r.quantity)-reserved),raw=$('lQty').value.trim(),quantity=Number(raw);
+      const valid=raw!==''&&Number.isFinite(quantity)&&quantity>0&&quantity<=available;
+      el.textContent=!raw?'Disponibles para esta operación: '+available+' '+r.unit:!Number.isFinite(quantity)||quantity<=0?'Introduce una cantidad mayor que cero.':quantity>available?'Cantidad insuficiente: solicitas '+quantity+' y solo hay '+available+' '+r.unit+' disponibles.':'Cantidad válida · '+available+' '+r.unit+' disponibles.';
+      el.style.color=valid?'#167347':'#af3333';btn.disabled=!valid;
+      return valid;
+    }
+    function chooseLogisticsMaterial(id){$('lMaterial').value=id;logisticsQrValidated='';$('lQr').value='';$('lQrStatus').textContent='QR opcional: verifica solo si lo utilizas.';logisticsMaterialChoices()}
     function logisticsQrReference(code){const raw=String(code||'').trim();if(raw.toUpperCase().startsWith('CELLARIQ:MAT:'))return raw.slice(13).trim();return raw;}
     function validateLogisticsQr(){const id=$('lMaterial').value;const row=(logisticsCatalogState.stock||[]).find(x=>id===x.materialId+'|'+x.ownerProject+'|'+x.zone);const code=$('lQr').value.trim();const matched=!!row&&!!code&&normalize(logisticsQrReference(code))===normalize(row.reference);logisticsQrValidated=matched?id:'';$('lQrStatus').textContent=matched?'QR verificado: '+row.reference:code?'El QR no coincide con el material seleccionado.':'Introduce o escanea el QR.';return matched;}
     async function logisticsQrScanned(decoded){$('lQr').value=decoded;if(validateLogisticsQr())status('QR del material verificado.','success');else status('El QR no corresponde a la referencia seleccionada.','error');}
@@ -1015,16 +1046,17 @@
       const [materialId,ownerProject,originZone]=($('lMaterial').value||'').split('|'),destinationZone=$('lDestinationZone').value,quantity=Number($('lQty').value);
       const row=(logisticsCatalogState.stock||[]).find(x=>x.materialId===materialId&&x.zone===originZone&&x.ownerProject===ownerProject);
       if(!row||!originZone||(logisticsFlow!=='CONSUME'&&!destinationZone)||!positive(quantity))return throwFailLogistics('Selecciona un material, su cantidad y la zona de destino.');
-      if(logisticsQrValidated!==$('lMaterial').value)return throwFailLogistics('Escanea y verifica el QR antes de añadir el material.');
+      if(!validateLogisticsQuantity())return throwFailLogistics('Revisa la cantidad solicitada y el stock disponible.');
+      if($('lQr').value.trim()&&logisticsQrValidated!==$('lMaterial').value)return throwFailLogistics('El QR introducido no coincide con el material seleccionado. Corrígelo o déjalo vacío.');
       if(logisticsFlow==='INTERNAL'&&originZone===destinationZone)return throwFailLogistics('Selecciona una zona de destino diferente para el movimiento interno.');
       const previous=logisticsCart.filter(x=>x.materialId===materialId&&x.originZone===originZone&&x.ownerProject===ownerProject).reduce((n,x)=>n+x.quantity,0);
       if(previous+quantity>Number(row.quantity)+1e-8)return throwFailLogistics('La cantidad supera el stock disponible.');
       logisticsCart.push({materialId,ownerProject,originZone,destinationZone:logisticsFlow==='CONSUME'?'CONSUMO':destinationZone,quantity,reference:row.reference,description:row.description,unit:row.unit,originWarehouse:$('lOrigin').value,destinationWarehouse:logisticsFlow==='INTERNAL'?$('lOrigin').value:$('lDestination').value,qrCode:$('lQr').value.trim(),project:LOGISTICS_WORKS[$('lDestination').value]||''});
-      $('lQty').value='';$('lQr').value='';logisticsQrValidated='';$('lQrStatus').textContent='Selecciona y verifica el siguiente material.';renderLogisticsCart();logisticsMaterialChoices();
+      $('lQty').value='';$('lQr').value='';logisticsQrValidated='';$('lQrStatus').textContent='Selecciona el siguiente material.';renderLogisticsCart();logisticsMaterialChoices();
     }
     function removeLogisticsLine(index){logisticsCart.splice(index,1);renderLogisticsCart();logisticsMaterialChoices()}
     function renderLogisticsCart(){
-      $('logisticsCart').innerHTML=logisticsCart.length?'<h3>Materiales de la operación · '+logisticsCart.length+' líneas</h3>'+logisticsCart.map((x,i)=>'<div class="line"><div class="line-title"><b>'+esc(x.reference)+' · '+esc(x.description)+'</b><button class="button secondary small" onclick="removeLogisticsLine('+i+')">Quitar</button></div><p>'+esc(x.quantity)+' '+esc(x.unit)+' · QR verificado · propietario '+esc(x.ownerProject)+' · '+esc(zoneLabel(x.originZone))+' → '+esc(zoneLabel(x.destinationZone))+'</p></div>').join(''):'<p class="muted">Añade los materiales que deseas trasladar.</p>';
+      $('logisticsCart').innerHTML=logisticsCart.length?'<h3>Materiales de la operación · '+logisticsCart.length+' líneas</h3>'+logisticsCart.map((x,i)=>'<div class="line"><div class="line-title"><b>'+esc(x.reference)+' · '+esc(x.description)+'</b><button class="button secondary small" onclick="removeLogisticsLine('+i+')">Quitar</button></div><p>'+esc(x.quantity)+' '+esc(x.unit)+' · '+(x.qrCode?'QR verificado':'Sin QR')+' · propietario '+esc(x.ownerProject)+' · '+esc(logisticsZoneName(x.originZone))+' → '+esc(logisticsZoneName(x.destinationZone))+'</p></div>').join(''):'<p class="muted">Añade los materiales que deseas trasladar.</p>';
     }
     async function submitLogistics(){
       if(actionBusy)return;
@@ -1133,7 +1165,7 @@
         view('stock',false);
 
         if(!state.apiVersion||backendMismatch){
-          status('Backend no sincronizado con LEVITEC Warehouse v1.0. Vuelve a desplegar Warehouse_Code.gs.','info');
+          status('Backend no sincronizado con LEVITEC Warehouse. Vuelve a desplegar Warehouse_Code.gs.','info');
         }
       }catch(e){
         $('app').hidden=true;
