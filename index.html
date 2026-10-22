@@ -170,7 +170,7 @@
   </style>
 </head>
 <body>
-  <div style="background:#8b261f;color:white;text-align:center;padding:10px;font-weight:800;letter-spacing:.06em;position:sticky;top:0;z-index:100">ENTORNO DE PRUEBAS · DATOS NO REALES · WAREHOUSE v1.6</div>
+  <div style="background:#8b261f;color:white;text-align:center;padding:10px;font-weight:800;letter-spacing:.06em;position:sticky;top:0;z-index:100">ENTORNO DE PRUEBAS · DATOS NO REALES · WAREHOUSE v1.7</div>
   <header class="topbar"><div class="topbar-inner">
     <div class="brand"><div class="brand-mark" aria-hidden="true">L</div><div><small>LEVITEC · SITE CONTROL</small><strong>Warehouse</strong></div></div>
     <div id="identity" class="identity" hidden>
@@ -207,7 +207,7 @@
       <div class="card panel">
         <div class="panel-top"><div><h2>Existencias</h2><p>Busca y filtra para localizar material rápidamente.</p></div></div>
         <div class="tools">
-          <label class="field search"><span>Buscar material</span><input id="search" type="search" placeholder="Descripción, referencia o zona…" oninput="renderStock()"></label>
+          <label class="field"><span>Ámbito</span><select id="stockScope" onchange="loadStockScope()"><option value="LOCAL">Almacén seleccionado</option><option value="GLOBAL">Todos los almacenes autorizados</option></select></label><label class="field"><span>Vista</span><select id="stockView" onchange="renderStock()"><option value="GROUP">Agrupada por referencia</option><option value="DETAIL">Detallada por ubicación</option></select></label><label class="field search"><span>Buscar material</span><input id="search" type="search" placeholder="Descripción, referencia o zona…" oninput="renderStock()"></label>
           <label class="field filter"><span>Proyecto</span><select id="stockProject" onchange="renderStock()"><option value="">Todos</option></select></label>
           <label class="field filter"><span>Ubicación</span><select id="stockZone" onchange="renderStock()"><option value="">Todas</option></select></label>
           <button type="button" class="button secondary" onclick="exportStock()">↓ &nbsp;Exportar CSV</button>
@@ -327,17 +327,27 @@
         <label class="field"><span>Proyecto</span><select id="lProject" onchange="logisticsChoices()"></select></label>
         <label class="field"><span>Zona origen</span><select id="lOriginZone" onchange="logisticsMaterialChoices()"></select></label>
         <label class="field"><span>Zona destino</span><select id="lDestinationZone"></select></label>
-        <label class="field"><span>Material disponible</span><select id="lMaterial"></select></label>
+        <label class="field"><span>Buscar referencia / descripción</span><input id="lSearch" type="search" oninput="logisticsMaterialChoices()" placeholder="Escribe para filtrar materiales…"></label><label class="field"><span>Material disponible y propietario</span><select id="lMaterial"></select></label>
         <label class="field"><span>Cantidad</span><input id="lQty" type="number" step="0.001" min="0.001" placeholder="0"></label>
         <label class="field"><span>Observaciones</span><input id="lNote" maxlength="250" placeholder="Motivo / zona de entrega"></label>
       </div>
       <div class="form-footer"><button type="button" class="button secondary" onclick="addLogisticsLine()">+ Añadir material a la operación</button></div>
-      <div class="notice spacer">Elige una referencia y cantidad y pulsa «Añadir material». Puedes incluir distintas referencias y zonas de origen en una misma operación. La autorización solo se solicitará para referencias críticas o bloqueadas.</div>
+      <div class="notice spacer">Los traslados entre almacenes conservan siempre el propietario. Las salidas confirmadas a OBRA consumen inmediatamente y solo generan compensación si el material pertenece a otro proyecto (excepto ANTIGUO). Elige una referencia y cantidad y pulsa «Añadir material». Puedes incluir distintas referencias y zonas de origen en una misma operación. La autorización solo se solicitará para referencias críticas o bloqueadas.</div>
       <div id="logisticsCart" class="spacer"></div>
-      <div class="form-footer"><button type="button" class="button" onclick="submitLogistics()">Crear operación con los materiales añadidos</button></div>
+      <div class="form-footer"><button id="lSubmit" type="button" class="button" onclick="submitLogistics()">Crear operación con los materiales añadidos</button></div>
       <div class="divider"></div><h3>Seguimiento de movimientos</h3>
       <div id="logisticsList" class="spacer"></div>
     </section>
+
+    <div id="logisticsReceiveModal" hidden style="position:fixed;inset:0;background:rgba(7,23,34,.64);z-index:300;display:none;place-items:center;padding:18px">
+      <section class="card" role="dialog" aria-modal="true" aria-labelledby="logisticsReceiveTitle" style="width:min(720px,100%);max-height:85vh;overflow:auto;padding:22px;background:white">
+        <h2 id="logisticsReceiveTitle">Confirmar recepción logística</h2>
+        <p>Introduce las unidades realmente recibidas por referencia. Las diferencias requieren indicar incidencia.</p>
+        <div id="logisticsReceiveLines"></div>
+        <label class="field"><span>Incidencia / observaciones (obligatoria si hay diferencias)</span><textarea id="logisticsReceiveNote" rows="3" maxlength="250"></textarea></label>
+        <div class="actions" style="margin-top:15px"><button type="button" class="button secondary" onclick="closeLogisticsReceipt()">Cancelar</button><button type="button" class="button" id="logisticsReceiveConfirm" onclick="submitLogisticsReceipt()">Confirmar recepción</button></div>
+      </section>
+    </div>
     <section id="transfer" class="card panel" hidden>
       <div class="panel-top"><div><h2>Mover material</h2><p>Selecciona el material manualmente o escanea su QR de referencia.</p></div><div class="actions"><button type="button" class="button secondary" onclick="scanQr()">▣ Escanear QR</button></div></div>
       <div class="form-grid two"><label class="field"><span>QR / referencia</span><input id="qrCode" placeholder="CELLARIQ:MAT:63838EKP0" onkeydown="if(event.key==='Enter'){event.preventDefault();lookupQr()}"><small>También puedes escribir directamente la referencia del material.</small></label><div class="form-footer"><button type="button" class="button secondary" onclick="lookupQr()">Localizar material</button></div></div>
@@ -412,10 +422,27 @@
       actionBusy=true;pendingRelease=pendingRelease||'op_'+crypto.randomUUID();status('Registrando la resolución de cuarentena…','info');
       try{await call('resolveQuarantine',{batchId:pendingRelease,action,project:x.project,origin:x.zone,destination,materialId:x.materialId,quantity,reason});pendingRelease='';await afterSave('Resolución de cuarentena registrada con trazabilidad.','quality')}catch(e){fail(e)}finally{actionBusy=false}}
     function filteredStock(){let q=normalize($('search').value),p=$('stockProject').value,z=$('stockZone').value;
-      return availableStock().filter(x=>(!p||x.project===p)&&(!z||x.zone===z)&&normalize([x.description,x.reference,x.project,x.zone].join(' ')).includes(q))}
+      return (($('stockScope')?.value==='GLOBAL')?(state.globalStock||[]):availableStock()).filter(x=>(!p||x.project===p)&&(!z||x.zone===z)&&normalize([x.description,x.reference,x.project,x.zone].join(' ')).includes(q))}
     function zoneLabel(code){let z=(state.zones||[]).find(x=>x.CODIGO===code);if(!z)return code;let wh=state.currentWarehouse?.id||'';let m=wh.match(/-N(\d+)$/);return (m?'N'+m[1]+' - ':'')+(z.NOMBRE||code)}
-    function renderStock(){let rows=filteredStock();lastVisibleStock=rows;$('stockCount').textContent=rows.length+' posiciones visibles';$('stockEmpty').hidden=rows.length>0;
-      $('stockRows').innerHTML=rows.map(x=>'<tr><td data-label="Material"><strong>'+esc(x.description)+'</strong></td><td data-label="Referencia">'+esc(x.reference||'—')+'</td><td data-label="Proyecto">'+esc(x.project)+'</td><td data-label="Ubicación">'+esc(zoneLabel(x.zone))+'</td><td data-label="Disponible" class="right"><span class="qty">'+esc(x.quantity)+' '+esc(x.unit)+'</span></td></tr>').join('')}
+    async function loadStockScope(){
+      if($('stockScope').value==='GLOBAL'){
+        try{status('Consultando inventario global…','info');const r=await call('globalStock',{});state.globalStock=r.stock||[];status('Inventario global actualizado.','success')}
+        catch(e){fail(e);$('stockScope').value='LOCAL';}
+      }
+      renderStock();
+    }
+    function renderStock(){
+      const rows=filteredStock();lastVisibleStock=rows;
+      $('stockEmpty').hidden=rows.length>0;
+      if($('stockView')?.value==='DETAIL'){
+        $('stockCount').textContent=rows.length+' posiciones visibles';
+        $('stockRows').innerHTML=rows.map(x=>'<tr><td><strong>'+esc(x.description)+'</strong></td><td>'+esc(x.reference||'—')+'</td><td>'+esc(x.project)+'</td><td>'+esc((x.warehouseName||state.currentWarehouse?.name||'')+' · '+zoneLabel(x.zone))+'</td><td class="right">'+esc(x.quantity)+' '+esc(x.unit)+'</td></tr>').join('');return;
+      }
+      const groups=new Map();rows.forEach(x=>{const key=x.materialId||x.reference;let g=groups.get(key);if(!g){g={...x,total:0,positions:[]};groups.set(key,g)}g.total+=Number(x.quantity);g.positions.push(x)});
+      $('stockCount').textContent=groups.size+' referencias · '+rows.length+' posiciones';
+      $('stockRows').innerHTML=[...groups.values()].map(g=>'<tr><td><details><summary><strong>'+esc(g.description)+'</strong> · '+g.positions.length+' ubicaciones</summary><div style="padding:8px 0">'+g.positions.map(x=>'<div>'+esc((x.warehouseName||state.currentWarehouse?.name||'')+' / '+zoneLabel(x.zone)+' · '+x.project+' — '+x.quantity+' '+x.unit)+'</div>').join('')+'</div></details></td><td>'+esc(g.reference||'—')+'</td><td>Varios / desglose</td><td>'+g.positions.length+' posiciones</td><td class="right"><strong>'+Math.round(g.total*1000)/1000+' '+esc(g.unit)+'</strong></td></tr>').join('');
+    }
+
     const SVG_NS='http://www.w3.org/2000/svg';
     const METRES_X=20.87/510,METRES_Y=21.31/520;
     function segmentMetres(a,b){return Math.hypot((b[0]-a[0])*METRES_X,(b[1]-a[1])*METRES_Y)}
@@ -876,7 +903,7 @@
       if(!positive(quantity)||Number(quantity)>limit+1e-8)throw Error('Introduce una cantidad válida, sin superar '+limit+' '+material.unit+' disponibles para este movimiento.');
       return{batchId:pendingMove||'op_'+crypto.randomUUID(),project,origin,destination,note:$('mNote').value.trim(),lines:[{materialId:id,quantity,materialLotId:''}]}}
     async function refresh(manual=false){const requestedWarehouse=state.currentWarehouse?.id,epoch=warehouseEpoch;if(manual)status('Actualizando datos…','info');
-      try{let r=await call('getStock',{warehouseId:requestedWarehouse});if(epoch!==warehouseEpoch||r.currentWarehouse?.id!==requestedWarehouse)return;state.stock=r.stock;state.movements=r.movements;state.zones=r.zones||state.zones;state.materials=r.materials||state.materials;state.zoneMap=r.zoneMap||state.zoneMap||[];state.projectRules=r.projectRules||state.projectRules||[];state.transfers=r.transfers||[];state.lots=r.lots||state.lots||[];state.materialPolicies=r.materialPolicies||[];state.transferRequests=r.transferRequests||[];state.siteMaterialRequests=r.siteMaterialRequests||[];state.siteOrders=r.siteOrders||[];state.receiptIncidents=r.receiptIncidents||[];state.logistics=r.logistics||[];renderLogistics();renderSiteOrderSelector();renderReceiptIncidents();state.currentWarehouse=r.currentWarehouse||state.currentWarehouse;state.zoneMapSupported=Array.isArray(r.zoneMap);
+      try{let r=await call('getStock',{warehouseId:requestedWarehouse});if(epoch!==warehouseEpoch||r.currentWarehouse?.id!==requestedWarehouse)return;state.stock=r.stock;if($('stockScope')?.value==='GLOBAL')loadStockScope();state.movements=r.movements;state.zones=r.zones||state.zones;state.materials=r.materials||state.materials;state.zoneMap=r.zoneMap||state.zoneMap||[];state.projectRules=r.projectRules||state.projectRules||[];state.transfers=r.transfers||[];state.lots=r.lots||state.lots||[];state.materialPolicies=r.materialPolicies||[];state.transferRequests=r.transferRequests||[];state.siteMaterialRequests=r.siteMaterialRequests||[];state.siteOrders=r.siteOrders||[];state.receiptIncidents=r.receiptIncidents||[];state.logistics=r.logistics||[];renderLogistics();renderSiteOrderSelector();renderReceiptIncidents();state.currentWarehouse=r.currentWarehouse||state.currentWarehouse;state.zoneMapSupported=Array.isArray(r.zoneMap);
         setChoices('rZone',state.zones.filter(z=>z.AREA==='ALMACEN'),'CODIGO','NOMBRE');receiptZoneHint();setChoices('mOrigin',state.zones.filter(z=>z.AREA==='ALMACEN'),'CODIGO','NOMBRE');setChoices('mDestination',state.zones,'CODIGO','NOMBRE');
         setChoices('stockProject',state.projects,'CODIGO','CODIGO','Todos');setChoices('stockZone',state.zones.filter(z=>z.AREA==='ALMACEN'),'CODIGO','NOMBRE','Todas');
         renderSummary();renderStock();renderLogistics();renderMoves();renderTransfers();renderMap();renderQuality();available();applyProjectRule();updateReceiptSuggestions();if(manual)status('Datos actualizados.')}
@@ -906,7 +933,7 @@
     async function cancelMovement(batchId){if(actionBusy||state.user.role!=='ADMIN')return;if(!confirm('Anular el movimiento '+batchId.slice(0,8)+'? El material volverá a figurar en el origen.'))return;
       actionBusy=true;status('Anulando movimiento…','info');
       try{await call('cancelMove',{batchId});await afterSave('Movimiento '+batchId.slice(0,8)+' anulado.','moves')}catch(e){fail(e)}finally{actionBusy=false}}
-    async function savePolicy(){if(!['ADMIN','JEFE'].includes(state.user?.role))return;let materialId=$('policyMaterial').value,project=$('policyProject').value,criticality=$('policyCriticality').value,reserve=$('policyReserve').value||'0',needDate=$('policyDate').value;if(!materialId||!project){status('Selecciona material y proyecto.','error');return}try{await call('saveMaterialPolicy',{materialId,project,criticality,reserve,needDate});await refresh();status('Protección de stock guardada.')}catch(e){fail(e)}}
+    let policyBusy=false;async function savePolicy(){if(policyBusy||!['ADMIN','JEFE'].includes(state.user?.role))return;policyBusy=true;const button=document.querySelector('button[onclick="savePolicy()"]');if(button){button.disabled=true;button.textContent='Guardando…'}let materialId=$('policyMaterial').value,project=$('policyProject').value,criticality=$('policyCriticality').value,reserve=$('policyReserve').value||'0',needDate=$('policyDate').value;if(!materialId||!project){status('Selecciona material y proyecto.','error');return}try{await call('saveMaterialPolicy',{materialId,project,criticality,reserve,needDate});await refresh();status('Protección de stock guardada.')}catch(e){fail(e)}finally{policyBusy=false;if(button){button.disabled=false;button.textContent='Guardar protección'}}}
     function showReceiptLabels(labels){lastReceiptLabels=labels||[];let box=$('receiptLabels');if(!lastReceiptLabels.length){box.hidden=true;return}let materials=lastReceiptLabels.filter(x=>x.type==='MATERIAL').length,quarantine=lastReceiptLabels.filter(x=>x.type==='CUARENTENA').length;box.hidden=false;box.innerHTML='<div><strong>'+materials+' etiqueta(s) de material'+(quarantine?' + '+quarantine+' de cuarentena':'')+' preparada(s).</strong> El QR de material identifica la referencia, no una cantidad ni un lote.</div><button type="button" class="button secondary small" style="margin-top:10px" onclick="printLabels(lastReceiptLabels)">Imprimir etiquetas</button>'}
     function expectedReceiptLabels(payload,backendLabels){
       let out=Array.isArray(backendLabels)?backendLabels.slice():[],has=(type,ref)=>out.some(x=>x.type===type&&normalizedReference(x.reference)===normalizedReference(ref));
@@ -936,12 +963,13 @@
       let csv='\uFEFF'+[header,...rows.map(x=>[x.description,x.reference,x.project,x.zone,x.quantity,x.unit])].map(row=>row.map(quote).join(';')).join('\r\n');
       let url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})),link=document.createElement('a');link.href=url;link.download='existencias-almacen-'+new Date().toISOString().slice(0,10)+'.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
 
-    // v1.6: solicitud multi-referencia, con aprobación excepcional y recepción por línea.
+    // v1.7: solicitud multi-referencia, con aprobación excepcional y recepción por línea.
     let pendingLogisticsClientId='',logisticsCart=[],logisticsCatalogState={warehouses:[],zones:[],stock:[]},logisticsFetchSerial=0;
     async function logisticsChoices(){
       if(!state.user)return;
       const origin=$('lOrigin').value||state.currentWarehouse?.id||'',dest=$('lDestination').value;
-      const project=$('lProject').value||(state.projects||[]).find(p=>p.CODIGO!=='GENERAL')?.CODIGO||'';
+      const obraMap={'OBRA 81':'ZAZ081','OBRA 91':'ZAZ091','OBRA AWB':'AWB','OBRA URBANIZACION MECANICA':'URBANIZACION MECANICA'};
+      const project=obraMap[dest]||$('lProject').value||(state.projects||[]).find(p=>p.CODIGO!=='GENERAL')?.CODIGO||'';
       setChoices('lProject',(state.projects||[]).filter(p=>p.CODIGO!=='GENERAL'),'CODIGO','CODIGO','Proyecto');$('lProject').value=project;
       const serial=++logisticsFetchSerial;
       try{
@@ -949,13 +977,13 @@
         if(serial!==logisticsFetchSerial)return;
         logisticsCatalogState=catalog;
         const all=catalog.warehouses||[];
-        setChoices('lOrigin',all.map(w=>({id:w.id,label:w.name+' · '+w.id})),'id','label','Origen');
+        setChoices('lOrigin',all.filter(w=>w.type!=='CONSUMO').map(w=>({id:w.id,label:w.name+' · '+w.id})),'id','label','Origen');
         setChoices('lDestination',all.map(w=>({id:w.id,label:w.name+' · '+w.id})),'id','label','Destino');
         if(all.some(w=>w.id===origin))$('lOrigin').value=origin;
-        if(all.some(w=>w.id===dest))$('lDestination').value=dest;
-        const zones=catalog.zones||[];
+        if(all.some(w=>w.id===dest))$('lDestination').value=dest;const workProjects={'OBRA 81':'ZAZ081','OBRA 91':'ZAZ091','OBRA AWB':'AWB','OBRA URBANIZACION MECANICA':'URBANIZACION MECANICA'};if(workProjects[$('lDestination').value])$('lProject').value=workProjects[$('lDestination').value];
+        const zones=catalog.zones||[];const isWork=$('lDestination').value.startsWith('OBRA ');
         setChoices('lOriginZone',zones.filter(z=>z.warehouseId===$('lOrigin').value).map(z=>({id:z.code,label:z.name})),'id','label','Zona origen');
-        setChoices('lDestinationZone',zones.filter(z=>z.warehouseId===$('lDestination').value).map(z=>({id:z.code,label:z.name})),'id','label','Zona destino');
+        setChoices('lDestinationZone',isWork?[{id:'CONSUMO',label:'Consumo en obra'}]:zones.filter(z=>z.warehouseId===$('lDestination').value).map(z=>({id:z.code,label:z.name})),'id','label','Zona destino');
         logisticsMaterialChoices();
         if(logisticsCart.length&&logisticsCart.some(x=>x.originWarehouse!==$('lOrigin').value||x.destinationWarehouse!==$('lDestination').value||x.project!==project)){
           logisticsCart=[];renderLogisticsCart();status('Has cambiado el origen, destino o proyecto: se ha vaciado la selección de materiales.','warning');
@@ -963,21 +991,22 @@
       }catch(e){if(serial===logisticsFetchSerial)status('No se pudo consultar la disponibilidad logística: '+e.message,'error')}
     }
     function logisticsMaterialChoices(){
-      const stock=logisticsCatalogState.stock||[];
-      setChoices('lMaterial',stock.filter(x=>x.zone===$('lOriginZone').value).map(x=>({id:x.materialId,label:(x.reference||'')+' · '+x.description+' · '+x.quantity+' '+x.unit+(x.ownQuantity<x.quantity?' · compartido':'')})),'id','label','Material');
+      const q=normalize($('lSearch')?.value||''),stock=logisticsCatalogState.stock||[];
+      const rows=stock.filter(x=>x.zone===$('lOriginZone').value&&normalize([x.reference,x.description,x.ownerProject].join(' ')).includes(q));
+      setChoices('lMaterial',rows.map(x=>({id:x.materialId+'|'+x.ownerProject,label:(x.reference||'')+' · '+x.description+' · '+x.ownerProject+' · '+x.quantity+' '+x.unit})),'id','label','Material / propietario');
     }
     function addLogisticsLine(){
-      const materialId=$('lMaterial').value,originZone=$('lOriginZone').value,destinationZone=$('lDestinationZone').value,quantity=Number($('lQty').value);
-      const row=(logisticsCatalogState.stock||[]).find(x=>x.materialId===materialId&&x.zone===originZone);
+      const [materialId,ownerProject]=($('lMaterial').value||'').split('|'),originZone=$('lOriginZone').value,destinationZone=$('lDestinationZone').value,quantity=Number($('lQty').value);
+      const row=(logisticsCatalogState.stock||[]).find(x=>x.materialId===materialId&&x.zone===originZone&&x.ownerProject===ownerProject);
       if(!row||!originZone||!destinationZone||!positive(quantity))return throwFailLogistics('Selecciona material, zonas y cantidad válida.');
-      const previous=logisticsCart.filter(x=>x.materialId===materialId&&x.originZone===originZone).reduce((n,x)=>n+x.quantity,0);
+      const previous=logisticsCart.filter(x=>x.materialId===materialId&&x.originZone===originZone&&x.ownerProject===ownerProject).reduce((n,x)=>n+x.quantity,0);
       if(previous+quantity>Number(row.quantity)+1e-8)return throwFailLogistics('La cantidad supera el stock libre, incluyendo las líneas ya añadidas.');
-      logisticsCart.push({materialId,originZone,destinationZone,quantity,reference:row.reference,description:row.description,unit:row.unit,originWarehouse:$('lOrigin').value,destinationWarehouse:$('lDestination').value,project:$('lProject').value});
+      logisticsCart.push({materialId,ownerProject,originZone,destinationZone,quantity,reference:row.reference,description:row.description,unit:row.unit,originWarehouse:$('lOrigin').value,destinationWarehouse:$('lDestination').value,project:$('lProject').value});
       $('lQty').value='';renderLogisticsCart();
     }
     function removeLogisticsLine(index){logisticsCart.splice(index,1);renderLogisticsCart()}
     function renderLogisticsCart(){
-      $('logisticsCart').innerHTML=logisticsCart.length?'<h3>Materiales de la operación · '+logisticsCart.length+' líneas</h3>'+logisticsCart.map((x,i)=>'<div class="line"><div class="line-title"><b>'+esc(x.reference)+' · '+esc(x.description)+'</b><button class="button secondary small" onclick="removeLogisticsLine('+i+')">Quitar</button></div><p>'+esc(x.quantity)+' '+esc(x.unit)+' · '+esc(zoneLabel(x.originZone))+' → '+esc(zoneLabel(x.destinationZone))+'</p></div>').join(''):'<p class="muted">Añade los materiales que deseas trasladar.</p>';
+      $('logisticsCart').innerHTML=logisticsCart.length?'<h3>Materiales de la operación · '+logisticsCart.length+' líneas</h3>'+logisticsCart.map((x,i)=>'<div class="line"><div class="line-title"><b>'+esc(x.reference)+' · '+esc(x.description)+'</b><button class="button secondary small" onclick="removeLogisticsLine('+i+')">Quitar</button></div><p>'+esc(x.quantity)+' '+esc(x.unit)+' · propietario '+esc(x.ownerProject)+' · '+esc(zoneLabel(x.originZone))+' → '+esc(zoneLabel(x.destinationZone))+'</p></div>').join(''):'<p class="muted">Añade los materiales que deseas trasladar.</p>';
     }
     async function submitLogistics(){
       if(actionBusy)return;
@@ -985,15 +1014,15 @@
       if(originWarehouse===destinationWarehouse)return throwFailLogistics('El origen y destino deben ser diferentes.');
       if(mode==='DIRECTA'&&originWarehouse!==state.currentWarehouse?.id)return throwFailLogistics('Para salida directa, selecciona el almacén de origen en la cabecera.');
       if(!logisticsCart.length)return throwFailLogistics('Añade al menos un material a la operación.');
-      const data={clientId:pendingLogisticsClientId||(pendingLogisticsClientId='LOGCLIENT-'+crypto.randomUUID()),mode,originWarehouse,destinationWarehouse,project:$('lProject').value,note:$('lNote').value.trim(),lines:logisticsCart.map(x=>({materialId:x.materialId,originZone:x.originZone,destinationZone:x.destinationZone,quantity:x.quantity}))};
+      const data={clientId:pendingLogisticsClientId||(pendingLogisticsClientId='LOGCLIENT-'+crypto.randomUUID()),mode,originWarehouse,destinationWarehouse,project:$('lProject').value,note:$('lNote').value.trim(),lines:logisticsCart.map(x=>({materialId:x.materialId,originZone:x.originZone,destinationZone:x.destinationZone,ownerProject:x.ownerProject,quantity:x.quantity}))};
       if(!confirm('¿Crear '+(mode==='DIRECTA'?'expedición':'solicitud')+' con '+logisticsCart.length+' líneas hacia '+destinationWarehouse+'?'))return;
-      actionBusy=true;
+      actionBusy=true;const btn=$('lSubmit');btn.disabled=true;btn.textContent='Registrando operación…';
       try{
         const r=await call('createLogistics',data);
         if(mode==='DIRECTA'&&!r.requiresApproval)await call('dispatchLogistics',{id:r.id});
         pendingLogisticsClientId='';logisticsCart=[];renderLogisticsCart();$('lNote').value='';
         await afterSave(r.requiresApproval?'Operación '+r.id+' pendiente de autorización por material protegido.':'Operación '+r.id+' registrada.','logistics');
-      }catch(e){fail(e)}finally{actionBusy=false}
+      }catch(e){fail(e)}finally{actionBusy=false;btn.disabled=false;btn.textContent='Crear operación con los materiales añadidos'}
     }
     function throwFailLogistics(message){status(message,'error');return null}
     function renderLogistics(){
@@ -1013,14 +1042,28 @@
         return '<div class="line"><div class="line-title"><h3>Operación '+esc(id)+' · '+esc(r.PROYECTO)+'</h3><span class="pill '+(statusName==='RECIBIDO'?'received':'pending')+'">'+esc(statusName)+'</span></div><p>'+esc(r.ORIGEN_ALMACEN)+' → '+esc(r.DESTINO_ALMACEN)+' · '+esc(r.MODO)+' · '+lines.length+' líneas</p>'+lines.map(x=>'<p>'+esc(x.REFERENCIA)+' · '+esc(x.CANTIDAD)+' '+esc(x.UNIDAD)+' · '+esc(zoneLabel(x.ORIGEN_ZONA))+' → '+esc(zoneLabel(x.DESTINO_ZONA))+(x.PROYECTO_ORIGEN&&x.PROYECTO_ORIGEN!==x.PROYECTO?' · origen imputado '+esc(x.PROYECTO_ORIGEN):'')+'</p>').join('')+(lines.some(x=>x.INCIDENCIA)?'<p class="notice warning">'+esc(lines.map(x=>x.INCIDENCIA).filter(Boolean).join(' | '))+'</p>':'')+'<div class="actions">'+actions+'</div></div>';
       }).join(''):'<p class="muted">Todavía no hay operaciones logísticas.</p>';
     }
+    let pendingLogisticsReceipt=null;
+    function closeLogisticsReceipt(){const m=$('logisticsReceiveModal');m.hidden=true;m.style.display='none';pendingLogisticsReceipt=null;}
+    function openLogisticsReceipt(id,lines){
+      pendingLogisticsReceipt={id,lines};
+      $('logisticsReceiveLines').innerHTML=lines.map((r,i)=>'<label class="field" style="margin:10px 0"><span>'+esc(r.REFERENCIA)+' · '+esc(r.DESCRIPCION)+' · propietario '+esc(r.PROYECTO_ORIGEN||r.PROYECTO)+' · expedido '+esc(r.CANTIDAD)+' '+esc(r.UNIDAD)+'</span><input type="number" class="v17ReceiveQuantity" data-id="'+esc(r.ID)+'" min="0" max="'+esc(r.CANTIDAD)+'" step="0.001" value="'+esc(r.CANTIDAD)+'"></label>').join('');
+      $('logisticsReceiveNote').value='';const m=$('logisticsReceiveModal');m.hidden=false;m.style.display='grid';
+    }
+    async function submitLogisticsReceipt(){
+      if(actionBusy||!pendingLogisticsReceipt)return;
+      const operation=pendingLogisticsReceipt,inputs=[...document.querySelectorAll('.v17ReceiveQuantity')];
+      const lines=inputs.map(el=>({id:el.dataset.id,quantity:Number(el.value)}));
+      if(lines.some((x,i)=>!Number.isFinite(x.quantity)||x.quantity<0||x.quantity>Number(operation.lines[i].CANTIDAD))){status('Cantidad de recepción no válida.','error');return;}
+      const note=$('logisticsReceiveNote').value.trim();
+      if(lines.some((x,i)=>x.quantity<Number(operation.lines[i].CANTIDAD))&&!note){status('Debes indicar el motivo de cualquier diferencia.','error');return;}
+      actionBusy=true;const button=$('logisticsReceiveConfirm');button.disabled=true;button.textContent='Registrando…';
+      try{await call('receiveLogistics',{id:operation.id,lines,note});closeLogisticsReceipt();await afterSave('Recepción registrada.','logistics');}
+      catch(e){fail(e)}finally{actionBusy=false;button.disabled=false;button.textContent='Confirmar recepción';}
+    }
     async function logisticsAction(id,kind){if(actionBusy)return;
       const group=(state.logistics||[]).filter(r=>(r.OPERACION_ID||r.ID)===id);if(!group.length)return;
       let data={id},action=kind==='dispatch'?'dispatchLogistics':kind==='cancel'?'cancelLogistics':kind==='receive'?'receiveLogistics':'approveLogistics';
-      if(kind==='receive'){
-        data.lines=[];
-        for(const r of group){const answer=prompt('Cantidad recibida de '+r.REFERENCIA+' ('+r.UNIDAD+'). Expedida: '+r.CANTIDAD,r.CANTIDAD);
-          if(answer===null)return;const q=Number(answer);if(!Number.isFinite(q)||q<0||q>Number(r.CANTIDAD)){status('Cantidad no válida.','error');return}data.lines.push({id:r.ID,quantity:q});}
-        if(data.lines.some((x,i)=>x.quantity<Number(group[i].CANTIDAD))){const reason=prompt('Indica la incidencia de transporte:');if(!reason?.trim())return;data.note=reason.trim()}
+      if(kind==='receive'){openLogisticsReceipt(id,group);return;
       }else if(['approve','reject'].includes(kind)){data.decision=kind==='approve'?'APROBAR':'RECHAZAR';if(!confirm('¿'+(kind==='approve'?'Aprobar':'Rechazar')+' esta operación de material protegido?'))return}
       else if(!confirm(kind==='dispatch'?'¿Confirmar expedición física y descontar el stock?':'¿Cancelar toda la solicitud?'))return;
       actionBusy=true;try{await call(action,data);await afterSave('Operación logística actualizada.','logistics')}catch(e){fail(e)}finally{actionBusy=false}
