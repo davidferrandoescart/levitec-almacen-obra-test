@@ -170,7 +170,7 @@
   </style>
 </head>
 <body>
-  <div style="background:#8b261f;color:white;text-align:center;padding:10px;font-weight:800;letter-spacing:.06em;position:sticky;top:0;z-index:100">ENTORNO DE PRUEBAS · DATOS NO REALES · WAREHOUSE v1.7</div>
+  <div style="background:#8b261f;color:white;text-align:center;padding:10px;font-weight:800;letter-spacing:.06em;position:sticky;top:0;z-index:100">ENTORNO DE PRUEBAS · DATOS NO REALES · WAREHOUSE v1.8 TEST</div>
   <header class="topbar"><div class="topbar-inner">
     <div class="brand"><div class="brand-mark" aria-hidden="true">L</div><div><small>LEVITEC · SITE CONTROL</small><strong>Warehouse</strong></div></div>
     <div id="identity" class="identity" hidden>
@@ -318,23 +318,23 @@
     </section>
 
     <section id="logistics" class="card panel" hidden>
-      <div class="panel-top"><div><h2>Traslados entre ubicaciones logísticas</h2><p>Solicitudes de encargados y salidas directas de almacén. La salida descuenta stock del origen; la recepción incorpora únicamente lo confirmado en destino.</p></div></div>
-      <div class="notice spacer">Para traslados dentro de la misma nave utiliza «Mover material». Aquí se gestionan las transferencias entre naves y campas.</div>
+      <div class="panel-top"><div><h2>Gestión logística</h2><p>Selecciona el tipo de operación. El propietario del material se conserva automáticamente en los movimientos físicos.</p></div></div>
+      <div class="actions spacer" style="display:flex;gap:10px;flex-wrap:wrap"><button type="button" class="button secondary" id="lFlowInternal" onclick="selectLogisticsFlow('INTERNAL')">Movimiento interno</button><button type="button" class="button secondary" id="lFlowTransfer" onclick="selectLogisticsFlow('TRANSFER')">Traslado entre almacenes</button><button type="button" class="button secondary" id="lFlowConsume" onclick="selectLogisticsFlow('CONSUME')">Salida a obra · Consumo</button></div><div id="lFlowHelp" class="notice spacer"></div><div id="lInternal" hidden class="notice spacer">Para reubicar material entre zonas de una misma nave utiliza el módulo específico de movimientos internos. <button type="button" class="button secondary small" onclick="view('transfer')">Abrir Mover material</button></div><div id="lFlowFields">
       <div class="form-grid three spacer">
         <label class="field"><span>Modalidad</span><select id="lMode" onchange="logisticsChoices()"><option value="SOLICITUD">Solicitar traslado</option><option value="DIRECTA">Salida directa</option></select></label>
         <label class="field"><span>Origen</span><select id="lOrigin" onchange="logisticsChoices()"></select></label>
         <label class="field"><span>Destino</span><select id="lDestination" onchange="logisticsChoices()"></select></label>
-        <label class="field"><span>Proyecto</span><select id="lProject" onchange="logisticsChoices()"></select></label>
-        <label class="field"><span>Zona origen</span><select id="lOriginZone" onchange="logisticsMaterialChoices()"></select></label>
+        <label class="field" id="lProjectField" hidden><span>Proyecto consumidor (automático)</span><select id="lProject" disabled></select></label>
+        <label class="field"><span>Filtrar por zona (opcional)</span><select id="lOriginZone" onchange="logisticsMaterialChoices()"></select></label>
         <label class="field"><span>Zona destino</span><select id="lDestinationZone"></select></label>
-        <label class="field"><span>Buscar referencia / descripción</span><input id="lSearch" type="search" oninput="logisticsMaterialChoices()" placeholder="Escribe para filtrar materiales…"></label><label class="field"><span>Material disponible y propietario</span><select id="lMaterial"></select></label>
+        <label class="field"><span>Buscar referencia / descripción</span><input id="lSearch" type="search" oninput="logisticsMaterialChoices()" placeholder="Escribe para filtrar materiales…"></label><div class="field" style="grid-column:1/-1"><span>Material disponible · Selecciona una posición de stock</span><div id="lMaterialResults" style="max-height:350px;overflow:auto"></div><select id="lMaterial" hidden aria-label="Material seleccionado"></select></div>
         <label class="field"><span>Cantidad</span><input id="lQty" type="number" step="0.001" min="0.001" placeholder="0"></label>
         <label class="field"><span>Observaciones</span><input id="lNote" maxlength="250" placeholder="Motivo / zona de entrega"></label>
       </div>
       <div class="form-footer"><button type="button" class="button secondary" onclick="addLogisticsLine()">+ Añadir material a la operación</button></div>
       <div class="notice spacer">Los traslados entre almacenes conservan siempre el propietario. Las salidas confirmadas a OBRA consumen inmediatamente y solo generan compensación si el material pertenece a otro proyecto (excepto ANTIGUO). Elige una referencia y cantidad y pulsa «Añadir material». Puedes incluir distintas referencias y zonas de origen en una misma operación. La autorización solo se solicitará para referencias críticas o bloqueadas.</div>
       <div id="logisticsCart" class="spacer"></div>
-      <div class="form-footer"><button id="lSubmit" type="button" class="button" onclick="submitLogistics()">Crear operación con los materiales añadidos</button></div>
+      <div class="form-footer"><button id="lSubmit" type="button" class="button" onclick="submitLogistics()">Crear operación con los materiales añadidos</button></div></div>
       <div class="divider"></div><h3>Seguimiento de movimientos</h3>
       <div id="logisticsList" class="spacer"></div>
     </section>
@@ -964,57 +964,71 @@
       let url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})),link=document.createElement('a');link.href=url;link.download='existencias-almacen-'+new Date().toISOString().slice(0,10)+'.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
 
     // v1.7: solicitud multi-referencia, con aprobación excepcional y recepción por línea.
-    let pendingLogisticsClientId='',logisticsCart=[],logisticsCatalogState={warehouses:[],zones:[],stock:[]},logisticsFetchSerial=0;
+    let pendingLogisticsClientId='',logisticsCart=[],logisticsCatalogState={warehouses:[],zones:[],stock:[]},logisticsFetchSerial=0,logisticsFlow='TRANSFER';
+    const LOGISTICS_WORKS={'OBRA 81':'ZAZ081','OBRA 91':'ZAZ091','OBRA AWB':'AWB','OBRA URBANIZACION MECANICA':'URBANIZACION MECANICA'};
+    function selectLogisticsFlow(flow){
+      logisticsFlow=flow;$('lInternal').hidden=flow!=='INTERNAL';$('lFlowFields').hidden=flow==='INTERNAL';
+      $('lFlowHelp').textContent=flow==='INTERNAL'?'Reubicación dentro de la misma nave: no hay cambio de propietario ni consumo.':flow==='TRANSFER'?'Traslado entre Nave 9, Nave 15 y Campa: sin consumo, sin cambio de propietario y sin imputación a proyecto destino.':'Salida a obra: se descuenta el stock cuando se confirma la expedición. La obra define automáticamente el proyecto consumidor.';
+      ['Internal','Transfer','Consume'].forEach((name,i)=>{const b=$('lFlow'+name);if(b)b.className='button '+(flow===['INTERNAL','TRANSFER','CONSUME'][i]?'':'secondary')});
+      $('lMode').value='DIRECTA';logisticsCart=[];renderLogisticsCart();logisticsChoices();
+    }
     async function logisticsChoices(){
       if(!state.user)return;
-      const origin=$('lOrigin').value||state.currentWarehouse?.id||'',dest=$('lDestination').value;
-      const obraMap={'OBRA 81':'ZAZ081','OBRA 91':'ZAZ091','OBRA AWB':'AWB','OBRA URBANIZACION MECANICA':'URBANIZACION MECANICA'};
-      const project=obraMap[dest]||$('lProject').value||(state.projects||[]).find(p=>p.CODIGO!=='GENERAL')?.CODIGO||'';
-      setChoices('lProject',(state.projects||[]).filter(p=>p.CODIGO!=='GENERAL'),'CODIGO','CODIGO','Proyecto');$('lProject').value=project;
+      const origin=$('lOrigin').value||state.currentWarehouse?.id||'',desired=$('lDestination').value;
       const serial=++logisticsFetchSerial;
       try{
-        const catalog=await call('logisticsCatalog',{originWarehouse:origin,destinationWarehouse:dest,project});
+        const catalog=await call('logisticsCatalog',{originWarehouse:origin,destinationWarehouse:desired,project:LOGISTICS_WORKS[desired]||''});
         if(serial!==logisticsFetchSerial)return;
         logisticsCatalogState=catalog;
-        const all=catalog.warehouses||[];
-        setChoices('lOrigin',all.filter(w=>w.type!=='CONSUMO').map(w=>({id:w.id,label:w.name+' · '+w.id})),'id','label','Origen');
-        setChoices('lDestination',all.map(w=>({id:w.id,label:w.name+' · '+w.id})),'id','label','Destino');
-        if(all.some(w=>w.id===origin))$('lOrigin').value=origin;
-        if(all.some(w=>w.id===dest))$('lDestination').value=dest;const workProjects={'OBRA 81':'ZAZ081','OBRA 91':'ZAZ091','OBRA AWB':'AWB','OBRA URBANIZACION MECANICA':'URBANIZACION MECANICA'};if(workProjects[$('lDestination').value])$('lProject').value=workProjects[$('lDestination').value];
-        const zones=catalog.zones||[];const isWork=$('lDestination').value.startsWith('OBRA ');
-        setChoices('lOriginZone',zones.filter(z=>z.warehouseId===$('lOrigin').value).map(z=>({id:z.code,label:z.name})),'id','label','Zona origen');
-        setChoices('lDestinationZone',isWork?[{id:'CONSUMO',label:'Consumo en obra'}]:zones.filter(z=>z.warehouseId===$('lDestination').value).map(z=>({id:z.code,label:z.name})),'id','label','Zona destino');
+        const all=catalog.warehouses||[],stores=all.filter(w=>w.type!=='CONSUMO'),destinations=logisticsFlow==='CONSUME'?all.filter(w=>w.type==='CONSUMO'):stores;
+        setChoices('lOrigin',stores.map(w=>({id:w.id,label:w.name+' · '+w.id})),'id','label','Origen');
+        setChoices('lDestination',destinations.map(w=>({id:w.id,label:w.name})),'id','label','Destino');
+        if(stores.some(w=>w.id===origin))$('lOrigin').value=origin;
+        if(destinations.some(w=>w.id===desired))$('lDestination').value=desired;
+        const dest=$('lDestination').value,consumer=LOGISTICS_WORKS[dest]||'';
+        setChoices('lProject',consumer?[{id:consumer,label:consumer}]:[],'id','label','No aplica');$('lProject').value=consumer;
+        $('lProjectField').hidden=logisticsFlow!=='CONSUME';
+        const zones=catalog.zones||[];
+        setChoices('lOriginZone',[{id:'',label:'Todas las zonas'}].concat(zones.filter(z=>z.warehouseId===$('lOrigin').value).map(z=>({id:z.code,label:z.name}))),'id','label','Todas las zonas');
+        setChoices('lDestinationZone',logisticsFlow==='CONSUME'?[{id:'CONSUMO',label:'Consumo en obra'}]:zones.filter(z=>z.warehouseId===dest).map(z=>({id:z.code,label:z.name})),'id','label','Zona destino');
+        $('lDestinationZone').closest('label').hidden=logisticsFlow==='CONSUME';
         logisticsMaterialChoices();
-        if(logisticsCart.length&&logisticsCart.some(x=>x.originWarehouse!==$('lOrigin').value||x.destinationWarehouse!==$('lDestination').value||x.project!==project)){
-          logisticsCart=[];renderLogisticsCart();status('Has cambiado el origen, destino o proyecto: se ha vaciado la selección de materiales.','warning');
+        if(logisticsCart.length&&logisticsCart.some(x=>x.originWarehouse!==$('lOrigin').value||x.destinationWarehouse!==dest)){
+          logisticsCart=[];renderLogisticsCart();status('Ubicación modificada: se ha vaciado la selección.','warning');
         }
-      }catch(e){if(serial===logisticsFetchSerial)status('No se pudo consultar la disponibilidad logística: '+e.message,'error')}
+      }catch(e){if(serial===logisticsFetchSerial)status('Error al consultar stock: '+e.message,'error')}
     }
     function logisticsMaterialChoices(){
-      const q=normalize($('lSearch')?.value||''),stock=logisticsCatalogState.stock||[];
-      const rows=stock.filter(x=>x.zone===$('lOriginZone').value&&normalize([x.reference,x.description,x.ownerProject].join(' ')).includes(q));
-      setChoices('lMaterial',rows.map(x=>({id:x.materialId+'|'+x.ownerProject,label:(x.reference||'')+' · '+x.description+' · '+x.ownerProject+' · '+x.quantity+' '+x.unit})),'id','label','Material / propietario');
+      const q=normalize($('lSearch')?.value||''),zone=$('lOriginZone').value,stock=logisticsCatalogState.stock||[];
+      const rows=stock.filter(x=>(!zone||x.zone===zone)&&normalize([x.reference,x.description,x.ownerProject,x.zone].join(' ')).includes(q));
+      const current=$('lMaterial').value;
+      setChoices('lMaterial',rows.map(x=>({id:x.materialId+'|'+x.ownerProject+'|'+x.zone,label:x.reference})),'id','label','Selecciona material');
+      if(rows.some(x=>x.materialId+'|'+x.ownerProject+'|'+x.zone===current))$('lMaterial').value=current;
+      const chosen=$('lMaterial').value;
+      $('lMaterialResults').innerHTML=rows.length?rows.slice(0,100).map(x=>{const id=x.materialId+'|'+x.ownerProject+'|'+x.zone,remaining=Math.max(0,Number(x.quantity)-(logisticsCart.filter(c=>c.materialId===x.materialId&&c.ownerProject===x.ownerProject&&c.originZone===x.zone).reduce((t,c)=>t+c.quantity,0)));return '<button type="button" class="button secondary" style="display:flex;width:100%;text-align:left;justify-content:space-between;gap:12px;margin:5px 0;white-space:normal;border:'+(chosen===id?'2px solid #157d70':'1px solid #ddd')+'" onclick="chooseLogisticsMaterial('+JSON.stringify(id).replace(/"/g,'&quot;')+')"><span><b>'+esc(x.reference)+'</b> · '+esc(x.description)+'<br><small>'+esc(x.zone)+' · Propietario: '+esc(x.ownerProject)+'</small></span><b style="white-space:nowrap">'+remaining+' '+esc(x.unit)+'</b></button>'}).join(''):'<p class="muted">No hay existencias coincidentes en el almacén de origen.</p>';
     }
+    function chooseLogisticsMaterial(id){$('lMaterial').value=id;logisticsMaterialChoices()}
     function addLogisticsLine(){
-      const [materialId,ownerProject]=($('lMaterial').value||'').split('|'),originZone=$('lOriginZone').value,destinationZone=$('lDestinationZone').value,quantity=Number($('lQty').value);
+      const [materialId,ownerProject,originZone]=($('lMaterial').value||'').split('|'),destinationZone=$('lDestinationZone').value,quantity=Number($('lQty').value);
       const row=(logisticsCatalogState.stock||[]).find(x=>x.materialId===materialId&&x.zone===originZone&&x.ownerProject===ownerProject);
-      if(!row||!originZone||!destinationZone||!positive(quantity))return throwFailLogistics('Selecciona material, zonas y cantidad válida.');
+      if(!row||!originZone||(logisticsFlow!=='CONSUME'&&!destinationZone)||!positive(quantity))return throwFailLogistics('Selecciona un material, su cantidad y la zona de destino.');
       const previous=logisticsCart.filter(x=>x.materialId===materialId&&x.originZone===originZone&&x.ownerProject===ownerProject).reduce((n,x)=>n+x.quantity,0);
-      if(previous+quantity>Number(row.quantity)+1e-8)return throwFailLogistics('La cantidad supera el stock libre, incluyendo las líneas ya añadidas.');
-      logisticsCart.push({materialId,ownerProject,originZone,destinationZone,quantity,reference:row.reference,description:row.description,unit:row.unit,originWarehouse:$('lOrigin').value,destinationWarehouse:$('lDestination').value,project:$('lProject').value});
-      $('lQty').value='';renderLogisticsCart();
+      if(previous+quantity>Number(row.quantity)+1e-8)return throwFailLogistics('La cantidad supera el stock disponible.');
+      logisticsCart.push({materialId,ownerProject,originZone,destinationZone:logisticsFlow==='CONSUME'?'CONSUMO':destinationZone,quantity,reference:row.reference,description:row.description,unit:row.unit,originWarehouse:$('lOrigin').value,destinationWarehouse:$('lDestination').value,project:LOGISTICS_WORKS[$('lDestination').value]||''});
+      $('lQty').value='';renderLogisticsCart();logisticsMaterialChoices();
     }
-    function removeLogisticsLine(index){logisticsCart.splice(index,1);renderLogisticsCart()}
+    function removeLogisticsLine(index){logisticsCart.splice(index,1);renderLogisticsCart();logisticsMaterialChoices()}
     function renderLogisticsCart(){
       $('logisticsCart').innerHTML=logisticsCart.length?'<h3>Materiales de la operación · '+logisticsCart.length+' líneas</h3>'+logisticsCart.map((x,i)=>'<div class="line"><div class="line-title"><b>'+esc(x.reference)+' · '+esc(x.description)+'</b><button class="button secondary small" onclick="removeLogisticsLine('+i+')">Quitar</button></div><p>'+esc(x.quantity)+' '+esc(x.unit)+' · propietario '+esc(x.ownerProject)+' · '+esc(zoneLabel(x.originZone))+' → '+esc(zoneLabel(x.destinationZone))+'</p></div>').join(''):'<p class="muted">Añade los materiales que deseas trasladar.</p>';
     }
     async function submitLogistics(){
       if(actionBusy)return;
       const mode=$('lMode').value,originWarehouse=$('lOrigin').value,destinationWarehouse=$('lDestination').value;
-      if(originWarehouse===destinationWarehouse)return throwFailLogistics('El origen y destino deben ser diferentes.');
+      if(logisticsFlow==='INTERNAL')return throwFailLogistics('Para movimiento interno abre el módulo Mover material.');
+      if(originWarehouse===destinationWarehouse)return throwFailLogistics('Elige dos almacenes distintos.');
       if(mode==='DIRECTA'&&originWarehouse!==state.currentWarehouse?.id)return throwFailLogistics('Para salida directa, selecciona el almacén de origen en la cabecera.');
       if(!logisticsCart.length)return throwFailLogistics('Añade al menos un material a la operación.');
-      const data={clientId:pendingLogisticsClientId||(pendingLogisticsClientId='LOGCLIENT-'+crypto.randomUUID()),mode,originWarehouse,destinationWarehouse,project:$('lProject').value,note:$('lNote').value.trim(),lines:logisticsCart.map(x=>({materialId:x.materialId,originZone:x.originZone,destinationZone:x.destinationZone,ownerProject:x.ownerProject,quantity:x.quantity}))};
+      const data={clientId:pendingLogisticsClientId||(pendingLogisticsClientId='LOGCLIENT-'+crypto.randomUUID()),mode,originWarehouse,destinationWarehouse,project:LOGISTICS_WORKS[destinationWarehouse]||'',note:$('lNote').value.trim(),lines:logisticsCart.map(x=>({materialId:x.materialId,originZone:x.originZone,destinationZone:x.destinationZone,ownerProject:x.ownerProject,quantity:x.quantity}))};
       if(!confirm('¿Crear '+(mode==='DIRECTA'?'expedición':'solicitud')+' con '+logisticsCart.length+' líneas hacia '+destinationWarehouse+'?'))return;
       actionBusy=true;const btn=$('lSubmit');btn.disabled=true;btn.textContent='Registrando operación…';
       try{
@@ -1102,7 +1116,7 @@
         $('userRole').textContent=state.user.role;
 
         renderWarehouseSelector();
-        logisticsChoices();renderLogistics();
+        selectLogisticsFlow('TRANSFER');renderLogistics();
         applyWarehouseIdentity();
 
         document.querySelectorAll('.write').forEach(button=>
@@ -1187,7 +1201,7 @@
 
         applyWarehouseIdentity();
         hydrateWarehouseControls();
-        logisticsChoices();renderLogistics();
+        selectLogisticsFlow('TRANSFER');renderLogistics();
 
         $('receiptLines').replaceChildren();
         addLine();
