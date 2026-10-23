@@ -170,7 +170,7 @@
   </style>
 </head>
 <body>
-  <div style="background:#8b261f;color:white;text-align:center;padding:10px;font-weight:800;letter-spacing:.06em;position:sticky;top:0;z-index:100">ENTORNO DE PRUEBAS · DATOS NO REALES · WAREHOUSE v1.17 TEST</div>
+  <div style="background:#8b261f;color:white;text-align:center;padding:10px;font-weight:800;letter-spacing:.06em;position:sticky;top:0;z-index:100">ENTORNO DE PRUEBAS · DATOS NO REALES · WAREHOUSE v1.18 TEST</div>
   <header class="topbar"><div class="topbar-inner">
     <div class="brand"><div class="brand-mark" aria-hidden="true">L</div><div><small>LEVITEC · SITE CONTROL</small><strong>Warehouse</strong></div></div>
     <div id="identity" class="identity" hidden>
@@ -397,7 +397,7 @@
     const pages={map:['Layout','Consulta la distribución real de la nave y el inventario por ubicación.'],quality:['Cuarentena','Material inmovilizado a la espera de la decisión de Calidad.'],stock:['Existencias','Material disponible por proyecto y ubicación.'],notifications:['Notificaciones','Recepciones pendientes y solicitudes de uso de stock protegido.'],transfers:['Traspasos','Consumos cruzados y saldos pendientes de compensar entre proyectos.'],logistics:['Operaciones de material','Movimientos internos, traslados y consumos a obra con identificación QR y múltiples referencias.'],moves:['Movimientos','Consulta la trazabilidad y confirma las entregas pendientes.'],receipt:['Nueva recepción','Registra la entrada de material con su albarán.'],transfer:['Mover material','Traslada existencias entre ubicaciones.']};
     function view(id,load=true){if(!pages[id]||(!['ADMIN','ALMACEN'].includes(state.user?.role)&&['receipt','transfer'].includes(id)))return;
       activeView=id;Object.keys(pages).forEach(k=>{$(k).hidden=k!==id});document.querySelectorAll('.tab').forEach(b=>{let selected=b.dataset.view===id;b.classList.toggle('active',selected);b.setAttribute('aria-current',selected?'page':'false')});
-      $('pageTitle').textContent=pages[id][0];$('pageIntro').textContent=pages[id][1];if(['moves','notifications','transfers'].includes(id)&&load)refresh().catch(fail);window.scrollTo({top:0,behavior:'smooth'})}
+      $('pageTitle').textContent=pages[id][0];$('pageIntro').textContent=pages[id][1];if(load&&id==='moves'&&!Array.isArray(state.movements))refresh().catch(fail);window.scrollTo({top:0,behavior:'smooth'})}
     const normalize=s=>String(s??'').toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
     function destinationNeedsValidation(code){let z=(state.zones||[]).find(x=>x.CODIGO===code);if(!z)return false;let tag=normalize([z.CODIGO,z.NOMBRE].join(' '));return ['CAMPA','OBRA'].includes(z.AREA)||tag.includes('zaz081')||tag.includes('zaz091')}
     function projectForDestination(code){let z=(state.zones||[]).find(x=>x.CODIGO===code);if(!z)return '';let tag=normalize([z.CODIGO,z.NOMBRE].join(' '));if(tag.includes('081')||tag.includes('zaz81'))return 'ZAZ081';if(tag.includes('091')||tag.includes('zaz91'))return 'ZAZ091';return ''}
@@ -901,8 +901,9 @@
       let limit=destinationNeedsValidation(destination)?Number(material.quantity):Number(material.projects[project]||0);
       if(!positive(quantity)||Number(quantity)>limit+1e-8)throw Error('Introduce una cantidad válida, sin superar '+limit+' '+material.unit+' disponibles para este movimiento.');
       return{batchId:pendingMove||'op_'+crypto.randomUUID(),project,origin,destination,note:$('mNote').value.trim(),lines:[{materialId:id,quantity,materialLotId:''}]}}
-    async function refresh(manual=false){const requestedWarehouse=state.currentWarehouse?.id,epoch=warehouseEpoch;if(manual)status('Actualizando datos…','info');
-      try{let r=await call('getStock',{warehouseId:requestedWarehouse});if(epoch!==warehouseEpoch||r.currentWarehouse?.id!==requestedWarehouse)return;state.stock=r.stock;if($('stockScope')?.value==='GLOBAL')loadStockScope();state.movements=r.movements;state.zones=r.zones||state.zones;state.materials=r.materials||state.materials;state.zoneMap=r.zoneMap||state.zoneMap||[];state.projectRules=r.projectRules||state.projectRules||[];state.transfers=r.transfers||[];state.lots=r.lots||state.lots||[];state.materialPolicies=r.materialPolicies||[];state.transferRequests=r.transferRequests||[];state.siteMaterialRequests=r.siteMaterialRequests||[];state.siteOrders=r.siteOrders||[];state.receiptIncidents=r.receiptIncidents||[];state.logistics=r.logistics||[];renderLogistics();renderSiteOrderSelector();renderReceiptIncidents();state.currentWarehouse=r.currentWarehouse||state.currentWarehouse;state.zoneMapSupported=Array.isArray(r.zoneMap);
+    let v118RefreshSerial=0;
+    async function refresh(manual=false){const requestedWarehouse=state.currentWarehouse?.id,epoch=warehouseEpoch,requestSerial=++v118RefreshSerial;if(manual)status('Actualizando datos…','info');
+      try{let r=await call('getStock',{warehouseId:requestedWarehouse});if(epoch!==warehouseEpoch||requestSerial!==v118RefreshSerial||r.currentWarehouse?.id!==requestedWarehouse)return;state.stock=r.stock;if($('stockScope')?.value==='GLOBAL')loadStockScope();state.movements=r.movements;state.zones=r.zones||state.zones;state.materials=r.materials||state.materials;state.zoneMap=r.zoneMap||state.zoneMap||[];state.projectRules=r.projectRules||state.projectRules||[];state.transfers=r.transfers||[];state.lots=r.lots||state.lots||[];state.materialPolicies=r.materialPolicies||[];state.transferRequests=r.transferRequests||[];state.siteMaterialRequests=r.siteMaterialRequests||[];state.siteOrders=r.siteOrders||[];state.receiptIncidents=r.receiptIncidents||[];state.logistics=r.logistics||[];renderLogistics();renderSiteOrderSelector();renderReceiptIncidents();state.currentWarehouse=r.currentWarehouse||state.currentWarehouse;state.zoneMapSupported=Array.isArray(r.zoneMap);
         setChoices('rZone',state.zones.filter(z=>z.AREA==='ALMACEN'),'CODIGO','NOMBRE');receiptZoneHint();setChoices('mOrigin',state.zones.filter(z=>z.AREA==='ALMACEN'),'CODIGO','NOMBRE');setChoices('mDestination',state.zones,'CODIGO','NOMBRE');
         setChoices('stockProject',state.projects,'CODIGO','CODIGO','Todos');setChoices('stockZone',state.zones.filter(z=>z.AREA==='ALMACEN'),'CODIGO','NOMBRE','Todas');
         renderSummary();renderStock();renderLogistics();renderMoves();renderTransfers();renderMap();renderQuality();available();applyProjectRule();updateReceiptSuggestions();if(manual){await logisticsChoices();status('Datos y buscador actualizados.')}}
@@ -1142,11 +1143,17 @@
       if(!$('logisticsList'))return;
       const rows=state.logistics||[],groups={};
       rows.forEach(r=>{const id=r.OPERACION_ID||r.ID;(groups[id]||(groups[id]=[])).push(r)});
-      const operations=Object.entries(groups);
+      const operations=Object.entries(groups).sort((a,b)=>{const date=items=>Math.max(...items.map(x=>Date.parse(String(x.FECHA||x.FECHA_EXPEDICION||'').replace(' ','T'))||0));return date(b[1])-date(a[1]);});
       $('navLogistics').textContent=operations.filter(([id,lines])=>lines.some(r=>['SOLICITADO','PENDIENTE_APROBACION','EN_TRANSITO','INCIDENCIA'].includes(r.ESTADO))).length?'· '+operations.filter(([id,lines])=>lines.some(r=>['SOLICITADO','PENDIENTE_APROBACION','EN_TRANSITO','INCIDENCIA'].includes(r.ESTADO))).length:'';
       $('logisticsList').innerHTML=operations.length?operations.map(([id,lines])=>{
-        const r=lines[0],statusName=r.ESTADO,canDispatch=['ADMIN','ALMACEN','ENCARGADO','AYUDANTE'].includes(state.user?.role)&&r.ORIGEN_ALMACEN===state.currentWarehouse?.id;
-        const canReceive=r.DESTINO_ALMACEN===state.currentWarehouse?.id&&!!state.canReceive;
+        const r=lines[0],statusName=r.ESTADO;
+        const authorizedWarehouses=new Set((state.warehouses||[]).map(w=>w.id));
+        const originPermitted=authorizedWarehouses.has(r.ORIGEN_ALMACEN);
+        const destinationPermitted=authorizedWarehouses.has(r.DESTINO_ALMACEN);
+        const campa=wid=>/^(ZAZ0(?:81|91)-CAMPA|HUE-MEC-CAMPA)$/.test(wid||'');
+        const role=state.user?.role;
+        const canDispatch=originPermitted&&(role==='ADMIN'||(role==='ALMACEN')||(campa(r.ORIGEN_ALMACEN)&&['ENCARGADO','AYUDANTE'].includes(role)));
+        const canReceive=destinationPermitted&&(role==='ADMIN'||role==='ALMACEN'||(campa(r.DESTINO_ALMACEN)&&['ENCARGADO','AYUDANTE'].includes(role)));
         const canApprove=['ADMIN','JEFE'].includes(state.user?.role);
         let actions='';
         if(statusName==='PENDIENTE_APROBACION'&&canApprove)actions='<button class="button small" data-id="'+esc(id)+'" onclick="logisticsAction(this.dataset.id,&quot;approve&quot;)">Aprobar</button> <button class="button secondary small" data-id="'+esc(id)+'" onclick="logisticsAction(this.dataset.id,&quot;reject&quot;)">Rechazar</button>';
@@ -1156,7 +1163,7 @@
       }).join(''):'<p class="muted">No hay traslados ni consumos.</p>';
       // Movimientos internos se conservan en EVENTOS, no en MOVIMIENTOS_LOGISTICOS.
       // Mostrar trazabilidad real en el mismo seguimiento, sin inventar estados.
-      const internalEvents=(state.movements||[]).filter(x=>x.TIPO==='MOVIMIENTO'&&String(x.ID_LOTE||'').startsWith('LOGCLIENT-'));
+      const internalEvents=(state.movements||[]).filter(x=>x.TIPO==='MOVIMIENTO'&&String(x.ID_LOTE||'').startsWith('LOGCLIENT-')).sort((a,b)=>String(b.FECHA||'').localeCompare(String(a.FECHA||'')));
       if(internalEvents.length){
         const buckets=new Map();internalEvents.forEach(x=>{if(!buckets.has(x.ID_LOTE))buckets.set(x.ID_LOTE,[]);buckets.get(x.ID_LOTE).push(x)});
         $('logisticsList').insertAdjacentHTML('afterbegin','<h3 style="margin:18px 0 8px">Movimientos internos registrados (eventos confirmados)</h3>'+[...buckets.entries()].map(([id,lines])=>'<div class="line"><div class="line-title"><b>Operación '+esc(id)+'</b><span class="pill received">REGISTRADO</span></div>'+lines.map(x=>'<p>'+esc(x.DESCRIPCION)+' · '+esc(x.CANTIDAD)+' '+esc(x.UNIDAD)+' · '+esc(zoneLabel(x.ORIGEN))+' → '+esc(zoneLabel(x.DESTINO))+' · '+esc(x.PROYECTO)+' · '+esc(String(x.FECHA||'').slice(0,16).replace('T',' '))+'</p>').join('')+'</div>').join(''));
