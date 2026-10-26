@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#14273b">
-  <title>LEVITEC Warehouse · TEST</title>
+  <title>LEVITEC Warehouse · Producción</title>
   <style>
     :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:#14273b;background:#f4f6f8;font-synthesis:none}
     *{box-sizing:border-box}
@@ -170,7 +170,6 @@
   </style>
 </head>
 <body>
-  <div style="background:#8b261f;color:white;text-align:center;padding:10px;font-weight:800;letter-spacing:.06em;position:sticky;top:0;z-index:100">ENTORNO DE PRUEBAS · DATOS NO REALES · WAREHOUSE v1.18 TEST</div>
   <header class="topbar"><div class="topbar-inner">
     <div class="brand"><div class="brand-mark" aria-hidden="true">L</div><div><small>LEVITEC · SITE CONTROL</small><strong>Warehouse</strong></div></div>
     <div id="identity" class="identity" hidden>
@@ -368,8 +367,51 @@
   </main>
   <script>
     const CLIENT_ID='847207312341-vatimdqe1f83fiji9cu7a27cslbio0t7.apps.googleusercontent.com';
-    const SCRIPT_URL='https://script.google.com/macros/s/AKfycby_xyidvHW7mAbpn1JbJ0MXaaKyjpVGuRnjytnYAndaDtX2aB7Y535UewnhbupuShTq4g/exec';
+    const SCRIPT_URL='https://script.google.com/macros/s/AKfycbx86icSTjNwO65y20Lvwf-rDMUAfPbb1s_Ct7YIa9W2DPgeKl5ByOMGZYXvq2TGQ74/exec';
     let warehouseEpoch=0,warehouseSwitching=false,zoneSaving=false;
+    const deepLinkParams=new URLSearchParams(window.location.search);
+    let pendingDeepLinkOrder=deepLinkParams.get('view')==='receipt' ? deepLinkParams.get('orderId') : null;
+    let deepLinkLocating=false;
+    function applyReceiptDeepLink(){
+      if(!pendingDeepLinkOrder)return false;
+      const orderId=pendingDeepLinkOrder;
+      if(!state.canReceive){
+        status('Tu usuario tiene acceso de consulta, pero no autorización para registrar recepciones en Warehouse.','info');
+        return false;
+      }
+      view('receipt',false);
+      const box=$('orderSearch');if(box)box.value=orderId;
+      if($('orderProjectFilter') && deepLinkParams.get('projectId'))$('orderProjectFilter').value=deepLinkParams.get('projectId');
+      renderSiteOrderBrowser();
+      const available=(state.siteOrders||[]).find(o=>o.requestId===orderId);
+      if(available && available.receiptStatus!=='COMPLETA' && (available.lines||[]).some(l=>Number(l.pending)>0)){
+        pendingDeepLinkOrder=null;
+        chooseSiteOrder(orderId);
+        status('Pedido abierto desde Site Control en '+(state.currentWarehouse?.name||'este almacén')+'. Comprueba el albarán antes de guardar.','info');
+        return true;
+      }
+      return false;
+    }
+    async function locateDeepLinkWarehouse(){
+      if(!pendingDeepLinkOrder||deepLinkLocating||!state.canReceive)return;
+      deepLinkLocating=true;
+      try{
+        if(applyReceiptDeepLink())return;
+        const original=state.currentWarehouse?.id;
+        const candidates=(state.warehouses||[]).map(x=>x.id).filter(id=>id&&id!==original);
+        const explicit=deepLinkParams.get('warehouseId');
+        if(explicit&&candidates.includes(explicit))candidates.splice(candidates.indexOf(explicit),1),candidates.unshift(explicit);
+        for(const id of candidates){
+          $('warehouseSelector').value=id;
+          await changeWarehouse();
+          if(applyReceiptDeepLink())return;
+        }
+        view('receipt',false);
+        const box=$('orderSearch');if(box)box.value=pendingDeepLinkOrder;
+        renderSiteOrderBrowser();
+        status('No se ha encontrado el pedido pendiente '+pendingDeepLinkOrder+' en tus almacenes autorizados. Puede estar completamente recepcionado o pendiente de sincronización.','info');
+      }finally{deepLinkLocating=false;}
+    }
     let credential='',state={},pendingReceipt='',pendingMove='',pendingRelease='',receiptSaving=false,moveSaving=false,actionBusy=false,activeView='stock',lastVisibleStock=[],drawing=false,draftPoints=[],draftDirty=false,geometryDirty=false,editorZoneCode='',qrScannerInstance=null,lastReceiptLabels=[],scannedMaterialRef='';
     const $=id=>document.getElementById(id);
     const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -863,31 +905,36 @@
         const unit=line.querySelector('.unit');
         if(![...unit.options].some(o=>o.value===l.unit))unit.add(new Option(l.unit,l.unit));
         unit.value=l.unit;
-        line.querySelector('.albaranQty').value=l.pending;
-        line.querySelector('.receivedQty').value=l.pending;
+        line.querySelector('.albaranQty').value='';
+        line.querySelector('.receivedQty').value='';
         updateReceiptLine(line);
       });
-      hint.textContent='Pedido '+(order.poNumber||order.requestId)+' · Introduce la cantidad realmente recibida en cada línea. Puedes corregir la referencia física, las cantidades y la cuarentena. Las diferencias generan incidencias. Para material no pedido, usa recepción libre.';
+      hint.textContent='Pedido '+(order.poNumber||order.requestId)+' · Solo completa las líneas que figuran en el albarán actual. Deja ambas cantidades vacías en las no incluidas: seguirán pendientes sin incidencia. Las discrepancias entre albarán y físico sí generan incidencia.';
       updateReceiptSuggestions();
     }
     function receiptData(){let supplier=$('supplier').value.trim(),doc=$('document').value.trim(),url=$('documentUrl').value.trim();
       if(!$('rProject').value||!$('rZone').value||!supplier||!doc)throw Error('Completa proyecto, zona conforme, proveedor y número de albarán o factura.');
       if(url&&!url.startsWith('https://'))throw Error('El enlace del documento debe empezar por https://');
-      let lines=[...document.querySelectorAll('#receiptLines .line')].map((line,i)=>{
+      const orderId=$('siteOrder').value;
+      const sourceLines=[...document.querySelectorAll('#receiptLines .line')].filter(line=>{
+        if(!orderId)return true;
+        return value(line,'albaranQty')!=='' || value(line,'receivedQty')!=='';
+      });
+      if(orderId && !sourceLines.length)throw Error('Ninguna línea está incluida en este albarán. No se puede registrar una recepción vacía.');
+      let lines=sourceLines.map((line,i)=>{
         updateReceiptLine(line);let item=Object.fromEntries(['description','reference','manufacturer','unit','albaranQty','receivedQty','quarantineQty','incident','category'].map(k=>[k,value(line,k)]));
         if(!item.reference||!item.description||!positive(item.albaranQty)||!nonNegative(item.receivedQty)||!nonNegative(item.quarantineQty))throw Error('Revisa referencia, descripción y cantidades de la línea '+(i+1)+'.');
         let received=Number(item.receivedQty),q=Number(item.quarantineQty);if(q>received)throw Error('La cuarentena supera lo recibido físicamente en la línea '+(i+1)+'.');
         item.acceptedQty=String(Math.round((received-q)*1000)/1000);item.zone=line.querySelector('.line-zone')?.value||$('rZone').value;
         item.quarantineZone=line.querySelector('.quarantine-zone')?.value||'';item.quarantineReason=line.querySelector('.quarantine-reason')?.value||'';
         if(q>0&&(!item.quarantineZone||!item.quarantineReason))throw Error('Selecciona zona y motivo de cuarentena en la línea '+(i+1)+'.');return item});
-      const orderId=$('siteOrder').value;
       if(orderId){
         const order=(state.siteOrders||[]).find(o=>o.requestId===orderId);
         if(!order)throw Error('El pedido ya no está disponible. Actualiza el almacén.');
         if(order.projectId!==$('rProject').value)throw Error('El proyecto no coincide con el pedido.');
         const linked=new Set();
         lines.forEach((l,i)=>{
-          const lineId=document.querySelectorAll('#receiptLines .line')[i].dataset.siteLineId;
+          const lineId=sourceLines[i].dataset.siteLineId;
           if(!lineId||linked.has(lineId))throw Error('Revisa las líneas del pedido seleccionado.');
           linked.add(lineId);l.siteLineId=lineId;
         });
@@ -953,7 +1000,35 @@
       return {material,stock};
     }
 
-    function printLabels(labels){let w=window.open('','_blank');if(!w){status('Permite ventanas emergentes para imprimir etiquetas.','error');return}let cards=labels.map(l=>{let isQ=l.type==='CUARENTENA',code=isQ?'CELLARIQ:Q:'+l.lotId:'CELLARIQ:MAT:'+l.reference,qr='https://quickchart.io/qr?size=220&text='+encodeURIComponent(code);return '<div class="label '+(isQ?'q':'')+'"><img src="'+qr+'"><div>'+(isQ?'<div class="flag">CUARENTENA</div>':'')+'<h2>'+esc(l.reference)+'</h2><p>'+esc(l.description)+'</p>'+(l.manufacturer?'<p>'+esc(l.manufacturer)+'</p>':'')+(isQ?'<b>'+esc(l.quantity)+' '+esc(l.unit)+' · '+esc(l.project)+'</b><p>'+esc(l.zone)+' · '+esc(l.reason||'Pendiente de revisión')+'</p><small>'+esc(l.lotId)+'</small>':'<small>QR MATERIAL · '+esc(l.reference)+'</small>')+'</div></div>'}).join('');w.document.write('<!doctype html><meta charset="utf-8"><title>Etiquetas CellarIQ</title><style>@page{size:A4;margin:10mm}body{font-family:Arial}.label{break-inside:avoid;display:grid;grid-template-columns:42mm 1fr;gap:6mm;border:1px solid #222;padding:6mm;margin:0 0 6mm}.label.q{border:3px solid #b66c00;background:#fff8e8}.label img{width:38mm;height:38mm}.label h2{margin:0 0 3mm;font-size:18pt}.label p{margin:2mm 0}.label small{font-family:monospace}.flag{font-weight:900;font-size:16pt;letter-spacing:.08em;margin-bottom:2mm}</style>'+cards+'<script>window.onload=()=>window.print()<\/script>');w.document.close()}
+    function printLabels(labels){
+      if(!Array.isArray(labels)||!labels.length){status('No hay etiquetas para imprimir.','error');return}
+      const w=window.open('','_blank');
+      if(!w){status('Permite ventanas emergentes para imprimir etiquetas.','error');return}
+      const cards=labels.map(l=>{
+        const isQ=l.type==='CUARENTENA';
+        const code=isQ?'CELLARIQ:Q:'+l.lotId:'CELLARIQ:MAT:'+l.reference;
+        const qr='https://quickchart.io/qr?size=240&margin=0&text='+encodeURIComponent(code);
+        return '<section class="label '+(isQ?'q':'')+'"><div class="qr"><img alt="QR" src="'+qr+'"></div><div class="info">'+
+          (isQ?'<div class="flag">CUARENTENA</div>':'<div class="eyebrow">LEVITEC · WAREHOUSE</div>')+
+          '<div class="reference">'+esc(l.reference)+'</div><div class="description">'+esc(l.description)+'</div>'+
+          (l.manufacturer?'<div class="manufacturer">'+esc(l.manufacturer)+'</div>':'')+
+          (isQ?'<div class="details">'+esc(l.quantity)+' '+esc(l.unit)+' · '+esc(l.project)+'</div><div class="details">'+esc(l.zone)+' · '+esc(l.reason||'Pendiente de revisión')+'</div><div class="foot">'+esc(l.lotId)+'</div>':'<div class="foot">QR MATERIAL · '+esc(l.reference)+'</div>')+
+          '</div></section>';
+      }).join('');
+      const css=`@page{size:75mm 50mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:white;color:#111;font-family:Arial,Helvetica,sans-serif}section.label{width:75mm;height:50mm;padding:2.5mm;display:grid;grid-template-columns:25mm minmax(0,1fr);gap:2mm;overflow:hidden;break-after:page;page-break-after:always;align-items:center}section.label:last-child{break-after:auto;page-break-after:auto}.qr{width:25mm;height:25mm;display:flex;align-items:center;justify-content:center}.qr img{display:block;width:25mm;height:25mm;object-fit:contain}.info{height:44mm;min-width:0;display:flex;flex-direction:column;justify-content:center;overflow:hidden}.eyebrow{font-size:6pt;font-weight:700;letter-spacing:.04em;color:#444;margin-bottom:1.2mm}.reference{font-size:11pt;font-weight:800;overflow-wrap:anywhere;line-height:1.08;margin-bottom:1.4mm}.description{font-size:8pt;font-weight:600;line-height:1.15;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}.manufacturer{font-size:6.5pt;margin-top:1.3mm;overflow-wrap:anywhere}.foot{font-size:5.5pt;margin-top:2mm;overflow-wrap:anywhere}.flag{font-size:9pt;font-weight:900;color:#8a3300;margin-bottom:1mm}.details{font-size:6.5pt;margin-top:1mm;overflow-wrap:anywhere}.q{outline:1mm solid #a54b00;outline-offset:-1mm}@media screen{body{background:#e9edf0;padding:10mm}section.label{background:white;margin:0 auto 6mm;box-shadow:0 2px 12px #0002}}@media print{body{background:white;padding:0}section.label{margin:0;box-shadow:none}}`;
+      w.document.open();
+      w.document.write('<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Etiquetas LEVITEC 75×50 mm</title><style>'+css+'</style></head><body>'+cards+'</body></html>');
+      w.document.close();
+      // Esperar a que se carguen los QR; evitar etiquetas sin código por impresión prematura.
+      const ready=()=>{
+        const images=Array.from(w.document.images);
+        Promise.all(images.map(img=>img.complete?Promise.resolve():new Promise(resolve=>{img.onload=resolve;img.onerror=resolve}))).then(()=>{
+          if(images.some(img=>!img.naturalWidth)){w.alert('No se han podido cargar todos los QR. Comprueba la conexión antes de imprimir.');return}
+          w.focus();w.print();
+        });
+      };
+      if(w.document.readyState==='complete')ready();else w.addEventListener('load',ready,{once:true});
+    }
     async function lookupQr(){let code=$('qrCode').value.trim();if(!code){status('Introduce o escanea una referencia de material.','error');return}try{await refresh();let r;try{r=await call('getMaterialByQr',{code})}catch(apiError){if(!/Acción no válida/i.test(String(apiError&&apiError.message||apiError)))throw apiError;r=materialQrSummaryLocally(code);status('El frontend está actualizado pero el backend desplegado es anterior. He localizado el material localmente; vuelve a desplegar LEVITEC Warehouse v1.0 para dejar ambas versiones sincronizadas.','info')}
       let material=r.material,stock=r.stock||[],warehouse=stock.filter(x=>x.area==='ALMACEN'&&Number(x.quantity)>0),quarantine=stock.filter(x=>x.area==='CUARENTENA'&&Number(x.quantity)>0);if(!warehouse.length)throw Error('La referencia existe, pero no tiene stock disponible en almacén. Cuarentena: '+quarantine.reduce((sum,x)=>sum+Number(x.quantity),0)+' '+material.UNIDAD+'.');let byZone={};warehouse.forEach(x=>byZone[x.zone]=(byZone[x.zone]||0)+Number(x.quantity));let zones=Object.entries(byZone).sort((a,b)=>b[1]-a[1]),preferred=zones[0][0];view('transfer',false);if([...$('mOrigin').options].some(o=>o.value===preferred))$('mOrigin').value=preferred;available();if([...$('mMaterial').options].some(o=>o.value===material.ID))$('mMaterial').value=material.ID;scannedMaterialRef=material.REFERENCIA;renderMoveSummary();let total=warehouse.reduce((sum,x)=>sum+Number(x.quantity),0),qtotal=quarantine.reduce((sum,x)=>sum+Number(x.quantity),0),zoneText=zones.map(([z,q])=>z+' '+q+' '+material.UNIDAD).join(' · ');status('Material localizado: '+material.REFERENCIA+' · '+material.DESCRIPCION+' · disponible '+total+' '+material.UNIDAD+(qtotal?' · cuarentena '+qtotal+' '+material.UNIDAD:'')+' · '+zoneText,'success')}catch(e){fail(e)}}
     async function scanQr(forLogistics=false){if(!window.Html5Qrcode){status('El lector QR no se ha cargado. Puedes escribir la referencia manualmente.','error');return}let overlay=$('qrScanner');overlay.hidden=false;overlay.style.display='grid';$('qrScannerStatus').textContent='Solicitando acceso a la cámara…';try{qrScannerInstance=new Html5Qrcode('qrReader');await qrScannerInstance.start({facingMode:'environment'},{fps:10,qrbox:{width:250,height:250},aspectRatio:1.0},async decoded=>{await stopQrScanner();if(forLogistics)await logisticsQrScanned(decoded);else{$('qrCode').value=decoded;await lookupQr()}},()=>{});$('qrScannerStatus').textContent='Apunta al QR del material. Mantén la etiqueta dentro del recuadro.'}catch(e){await stopQrScanner();status('No se pudo abrir la cámara. Revisa el permiso de cámara en Safari o introduce la referencia manualmente. '+(e&&e.message?e.message:''),'error')}}
@@ -1215,7 +1290,7 @@
         state.zoneMapSupported=Array.isArray(state.zoneMap);
         state.zoneMap=state.zoneMap||[];
 
-        let backendMismatch=state.apiVersion&&state.apiVersion!=='1.16-test';
+        let backendMismatch=state.apiVersion&&state.apiVersion!=='1.20-rc2-prod';
 
         $('login').hidden=true;
         $('app').hidden=false;
@@ -1240,9 +1315,10 @@
         addLine();
         await refresh();
         view('stock',false);
+        await locateDeepLinkWarehouse();
 
         if(!state.apiVersion||backendMismatch){
-          status('Backend no sincronizado con LEVITEC Warehouse. Vuelve a desplegar Warehouse_Code.gs.','info');
+          status('La versión del backend no coincide con la de Warehouse Producción. Verifica la implementación de Apps Script.','info');
         }
       }catch(e){
         $('app').hidden=true;
@@ -1337,7 +1413,15 @@
         renderWarehouseSelector();
       }finally{warehouseSwitching=false}
     }
-    function initGoogle(){google.accounts.id.initialize({client_id:CLIENT_ID,callback:signedIn,ux_mode:'popup'});google.accounts.id.renderButton($('signin'),{theme:'outline',size:'large',text:'signin_with',width:250})}
+    function initGoogle(){
+      google.accounts.id.initialize({client_id:CLIENT_ID,callback:signedIn,ux_mode:'popup',auto_select:false});
+      google.accounts.id.renderButton($('signin'),{theme:'outline',size:'large',text:'signin_with',width:250});
+      // Intento sin interacción solamente al acceder a un pedido desde Site Control.
+      // GIS puede rechazarlo (consentimiento, cookies, navegador); nunca se omite auth_ del backend.
+      if(pendingDeepLinkOrder){
+        try{google.accounts.id.prompt();}catch(e){console.warn('Google silent sign-in unavailable',e);}
+      }
+    }
   </script>
   <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer onload="initGoogle()"></script>
