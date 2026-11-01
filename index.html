@@ -2,12 +2,12 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-vGy7q9MDU0dJTYH5C23z2zSgYvwVPr708MP7Qjh7E5M=' 'sha256-ihwymJXpIMbYK3nWrkC/41GRiUXzv8NZyr0KPDqrZV8=' 'sha256-yyUuXx7zIZg31u7FKTHmGv1fee/RSAnbLcMcmju2QpY=' 'sha256-iMF49XLtRBeZAutE+pv+ALrW6I6m/MLYPsZdJGXKwy8=' https://accounts.google.com/gsi/client https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js; script-src-elem 'self' 'sha256-vGy7q9MDU0dJTYH5C23z2zSgYvwVPr708MP7Qjh7E5M=' 'sha256-ihwymJXpIMbYK3nWrkC/41GRiUXzv8NZyr0KPDqrZV8=' 'sha256-yyUuXx7zIZg31u7FKTHmGv1fee/RSAnbLcMcmju2QpY=' 'sha256-iMF49XLtRBeZAutE+pv+ALrW6I6m/MLYPsZdJGXKwy8=' https://accounts.google.com/gsi/client https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://quickchart.io https://*.googleusercontent.com; connect-src 'self' https://accounts.google.com https://*.googleapis.com; frame-src https://accounts.google.com https://script.google.com https://*.googleusercontent.com; form-action https://script.google.com https://*.googleusercontent.com; object-src 'none'; base-uri 'none'; worker-src 'self' blob:; media-src 'self' blob:">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-yPJ8XJx7b9Y2iuq+mxvvqRMmv8oRCUkQStDuHQ4HNPc=' 'sha256-ihwymJXpIMbYK3nWrkC/41GRiUXzv8NZyr0KPDqrZV8=' 'sha256-yyUuXx7zIZg31u7FKTHmGv1fee/RSAnbLcMcmju2QpY=' 'sha256-iMF49XLtRBeZAutE+pv+ALrW6I6m/MLYPsZdJGXKwy8=' https://accounts.google.com/gsi/client https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js; script-src-elem 'self' 'sha256-yPJ8XJx7b9Y2iuq+mxvvqRMmv8oRCUkQStDuHQ4HNPc=' 'sha256-ihwymJXpIMbYK3nWrkC/41GRiUXzv8NZyr0KPDqrZV8=' 'sha256-yyUuXx7zIZg31u7FKTHmGv1fee/RSAnbLcMcmju2QpY=' 'sha256-iMF49XLtRBeZAutE+pv+ALrW6I6m/MLYPsZdJGXKwy8=' https://accounts.google.com/gsi/client https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://quickchart.io https://*.googleusercontent.com; connect-src 'self' https://accounts.google.com https://*.googleapis.com; frame-src https://accounts.google.com https://script.google.com https://*.googleusercontent.com; form-action https://script.google.com https://*.googleusercontent.com; object-src 'none'; base-uri 'none'; worker-src 'self' blob:; media-src 'self' blob:">
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#000000">
-  <meta name="levitec-frontend-release" content="audit-client-20261101.10-candidate">
-  <title>LEVITEC Warehouse · TEST · candidata HF10</title>
+  <meta name="levitec-frontend-release" content="audit-client-20261101.11-test">
+  <title>LEVITEC Warehouse · TEST · HF11</title>
   
 <link rel="icon" href="./favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
@@ -1682,8 +1682,16 @@
       status('Cambiando de almacén…','info');
 
       try{
-        let result=await call('bootstrap',{warehouseId:id});
-        state=Object.assign({},state,result);
+        const result=await call('bootstrap',{warehouseId:id});
+        if(result.currentWarehouse?.id!==id)throw Error('La respuesta no corresponde al almacén solicitado.');
+        // bootstrap no incluye movimientos ni disponibilidad: no conservarlos del almacén anterior.
+        const inventory=await call('getStock',{warehouseId:id});
+        if(inventory.currentWarehouse?.id!==id)throw Error('El inventario no corresponde al almacén solicitado.');
+        state=Object.assign({},state,result,inventory,{
+          movements:inventory.movements||[],internalMovementsRC12:inventory.internalMovementsRC12||[],
+          availableStockRC12:inventory.availableStockRC12||[]
+        });
+        renderWarehouseSelector();
         rememberReceiptCatalogRC14(result.receiptDestinationsRC14);
         $('siteOrder').value='';
         state.siteMaterialRequests=state.siteMaterialRequests||[];

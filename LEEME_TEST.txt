@@ -1,4 +1,13 @@
-WAREHOUSE TEST — candidata HF10 — 01/11/2026
+WAREHOUSE TEST — HF11 — 01/11/2026
+
+HF11: al cambiar de almacén, bootstrap y getStock deben corresponder ambos al
+destino solicitado antes de aplicar el nuevo contexto. Movimientos, movimientos
+internos y disponibilidad dejan de conservar las listas del almacén anterior.
+Si falla la consulta se conserva el contexto previo; el selector se sincroniza
+al terminar aunque haya una segunda selección durante la espera.
+Ocho pruebas locales específicas, ocho de estructura/CSP y regresión de formularios
+correctas. Revalidar el cambio en el navegador después de recargar la página TEST.
+El backend no cambia. No repite piloto ni crea movimientos automáticamente.
 
 ESTADO ACTUAL (sustituye las instrucciones históricas de abajo)
 Página TEST confirmada por GitHub Pages:
