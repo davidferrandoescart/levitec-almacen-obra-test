@@ -1,4 +1,29 @@
-WAREHOUSE TEST v1.4 — FRONTEND INDEPENDIENTE
+WAREHOUSE TEST — candidata HF10 — 01/11/2026
+
+ESTADO ACTUAL (sustituye las instrucciones históricas de abajo)
+Página TEST confirmada por GitHub Pages:
+https://davidferrandoescart.github.io/levitec-almacen-obra-test/
+
+Este index.html apunta exclusivamente al backend TEST. El nombre del repositorio
+no garantiza aislamiento: comprobar SCRIPT_URL y la base antes de operar.
+No sustituir archivos ni backend de producción ni conectar Site Control de producción.
+
+HF10 migra atributos de eventos a acciones con datos y retira unsafe-inline
+de las directivas CSP de scripts. Su título identifica TEST. No cambia el backend.
+Validación local: Chrome 111/111 acciones/CSP y 16/16 renderizado con servicios
+simulados; 8/8 estructura/hashes/destino. Formularios y recuperación correctos.
+Falta validar acceso Google real, QR/cámara, impresión, iframe, operaciones y roles
+en el origen alojado. No certifica capacidad de 15 personas.
+
+FRONTEND_ORIGIN del backend TEST debe corresponder al origen exacto de la página,
+GOOGLE_CLIENT_ID al cliente OAuth autorizado y DB_SPREADSHEET_ID a la base TEST.
+No cambiar propiedades por adivinación; no ejecutar setup ni migraciones.
+
+Hallazgo: bc46b9afe19d9bb4bab070182a976d08ce870662 y la página publicada
+verificada el 01/11/2026 apuntaban a producción pese al nombre TEST.
+Se conservó evidencia; no se realizaron operaciones desde esa versión en esta revisión.
+
+INSTRUCCIONES HISTÓRICAS v1.4 (origen antiguo; no utilizar para configurar ahora)
 
 1. Crear repositorio NUEVO en GitHub: levitec-almacen-obra-test (Public).
 2. Subir el index.html de este ZIP a la RAÍZ del repositorio nuevo.
